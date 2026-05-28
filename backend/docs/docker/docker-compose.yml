@@ -1,0 +1,87 @@
+services:
+  mysql:
+    image: mysql:8.0.40
+    container_name: idealagent-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: ${IDEAL_AGENT_MYSQL_DATABASE}
+      MYSQL_USER: ${IDEAL_AGENT_USERNAME}
+      MYSQL_PASSWORD: ${IDEAL_AGENT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${IDEAL_AGENT_ROOT_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - idealagent_mysql_data:/var/lib/mysql
+      - ./conf/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+      - ../mysql/ideal_agent_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ../mysql/ideal_agent_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    networks:
+      - idealagent
+
+  redis:
+    image: redis:8.0.1
+    container_name: idealagent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${IDEAL_AGENT_PASSWORD}"]
+    volumes:
+      - idealagent_redis_data:/data
+      - ./conf/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - idealagent
+
+  pgvector:
+    image: pgvector/pgvector:0.7.4-pg16
+    container_name: idealagent-pgvector
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ideal_agent
+      POSTGRES_USER: ${IDEAL_AGENT_USERNAME}
+      POSTGRES_PASSWORD: ${IDEAL_AGENT_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - idealagent_pgvector_data:/var/lib/postgresql/data
+      - ./conf/pgvector.sql:/docker-entrypoint-initdb.d/01_pgvector.sql:ro
+    networks:
+      - idealagent
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: idealagent-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${IDEAL_AGENT_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${IDEAL_AGENT_PASSWORD}
+    networks:
+      - idealagent
+
+  one-api:
+    image: justsong/one-api:v0.6.11-preview.7
+    container_name: idealagent-one-api
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SQL_DSN: root:${IDEAL_AGENT_ROOT_PASSWORD}@tcp(mysql:3306)/oneapi?charset=utf8mb4&parseTime=True&loc=Local
+      TZ: ${TZ}
+    depends_on:
+      - mysql
+    networks:
+      - idealagent
+
+volumes:
+  idealagent_mysql_data:
+  idealagent_redis_data:
+  idealagent_pgvector_data:
+
+networks:
+  idealagent:
+    driver: bridge
