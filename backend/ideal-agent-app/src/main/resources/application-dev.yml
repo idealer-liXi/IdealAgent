@@ -5,13 +5,16 @@ server:
 
 spring:
   datasource:
-    mysql:
-      driver-class-name: com.mysql.cj.jdbc.Driver
-      jdbc-url: jdbc:mysql://127.0.0.1:3306/ideal_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-      username: root
-      password: 123456
-    pgvector:
-      driver-class-name: org.postgresql.Driver
-      jdbc-url: jdbc:postgresql://127.0.0.1:5432/ideal_agent
-      username: idealagent
-      password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/ideal_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+
+ideal-agent:
+  jwt:
+    issuer: ideal-agent
+    secret: ideal-agent-dev-secret-change-me
+    expire-hours: 168

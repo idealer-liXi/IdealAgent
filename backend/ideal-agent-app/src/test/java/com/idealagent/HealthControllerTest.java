@@ -2,27 +2,30 @@ package com.idealagent;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.web.servlet.MockMvc;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import com.idealagent.domain.auth.service.ITokenParser;
+import com.idealagent.trigger.controller.HealthController;
 
-@SpringBootTest(
-        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration"
-)
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@WebMvcTest(controllers = HealthController.class)
 class HealthControllerTest {
 
     @Autowired
-    private TestRestTemplate restTemplate;
+    private MockMvc mockMvc;
+
+    @MockBean
+    private ITokenParser tokenParser;
 
     @Test
-    void healthEndpointReturnsRunningMessage() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/health", String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("IdealAgent is running");
+    void healthEndpointReturnsRunningMessage() throws Exception {
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value("IdealAgent is running"));
     }
 }
