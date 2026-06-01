@@ -1,12 +1,16 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import request from '../request/request'
+import { getStoredProfile } from '../utils/auth'
 import Sidebar from './Sidebar.vue'
 import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
 import ChatMessage from './chat/ChatMessage.vue'
 import ChatInput from './chat/ChatInput.vue'
 import SessionList from './chat/SessionList.vue'
+
+const profile = ref(getStoredProfile())
+const userName = computed(() => profile.value?.userName || '')
 
 const clientId = ref('')
 const clients = ref([])
@@ -177,6 +181,7 @@ function newSession() {
                 :key="message.messageId"
                 :role="message.role"
                 :content="message.content"
+                :user-name="userName"
               />
               <div v-if="messages.length === 0" class="flex flex-col items-center justify-center py-24 text-text-tertiary">
                 <div class="mb-3 text-4xl opacity-30">💬</div>

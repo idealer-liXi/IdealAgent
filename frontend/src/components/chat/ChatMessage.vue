@@ -4,6 +4,7 @@ import { computed } from 'vue'
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, required: true },
+  userName: { type: String, default: '' },
 })
 
 const isUser = computed(() => props.role === 'user')
@@ -16,21 +17,21 @@ const isUser = computed(() => props.role === 'user')
   >
     <!-- Avatar -->
     <div
-      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full select-none overflow-hidden"
+      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full select-none overflow-hidden text-xs font-bold"
       :class="isUser
-        ? 'bg-accent text-white text-xs font-bold'
-        : 'bg-surface border border-border-default'
+        ? 'bg-accent text-white'
+        : 'bg-surface border border-border-default text-text-tertiary'
       "
     >
-      <span v-if="isUser">我</span>
-      <span v-else class="text-lg">🤖</span>
+      <span v-if="isUser">me</span>
+      <span v-else>IA</span>
     </div>
 
     <!-- Bubble Column -->
     <div class="flex flex-col max-w-[75%]" :class="isUser ? 'items-end' : 'items-start'">
       <!-- Name Tag -->
       <span class="text-[11px] text-text-tertiary mb-1 px-0.5">
-        {{ isUser ? '我' : 'IdealAgent' }}
+        {{ isUser ? (userName || '我') : 'IdealAgent' }}
       </span>
 
       <!-- Message Bubble -->
@@ -38,7 +39,7 @@ const isUser = computed(() => props.role === 'user')
         class="relative px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap break-words"
         :class="isUser
           ? 'bg-accent text-white rounded-t-2xl rounded-l-2xl rounded-br-sm'
-          : 'bg-white border border-border-subtle text-text-primary rounded-t-2xl rounded-r-2xl rounded-bl-sm'
+          : 'bg-surface border border-border-default text-text-primary rounded-t-2xl rounded-r-2xl rounded-bl-sm'
         "
       >
         {{ content }}
