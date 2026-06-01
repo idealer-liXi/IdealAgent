@@ -1,23 +1,48 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import request from '../request/request'
 import Sidebar from './Sidebar.vue'
 import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
-import UiInput from './ui/UiInput.vue'
 import ChatMessage from './chat/ChatMessage.vue'
 import ChatInput from './chat/ChatInput.vue'
 import SessionList from './chat/SessionList.vue'
 
-const clientId = ref('client_default_chat')
+const clientId = ref('')
+const clients = ref([])
+const clientError = ref('')
 const sessionId = ref('')
 const content = ref('')
 const messages = ref([])
 const sessions = ref([])
 const error = ref('')
 const loading = ref(false)
+const canSend = computed(() => Boolean(clientId.value) && !loading.value)
 
-onMounted(loadSessions)
+onMounted(async () => {
+  await Promise.all([loadSessions(), loadClients()])
+})
+
+async function loadClients() {
+  clientError.value = ''
+  try {
+    const response = await request.get('/chat/clients')
+    clients.value = response.data.data || []
+    const defaultClient = clients.value.find(item => item.clientId === 'client_default_chat') || clients.value[0]
+    clientId.value = defaultClient?.clientId || ''
+    if (!clientId.value) {
+      clientError.value = '暂无可用 Client，请先去 Config 创建'
+    }
+  } catch (e) {
+    clientError.value = e.response?.data?.message || 'Client 列表加载失败'
+  }
+}
+
+function clientLabel(client) {
+  const name = client.clientName || client.clientId
+  const model = client.modelName || client.modelId || '未绑定模型'
+  return `${name} / ${model}`
+}
 
 async function loadSessions() {
   try {
@@ -40,6 +65,10 @@ async function loadMessages(nextSessionId) {
 }
 
 async function send() {
+  if (!clientId.value) {
+    error.value = '请先选择可用 Client'
+    return
+  }
   if (!content.value.trim()) {
     error.value = '请输入消息内容'
     return
@@ -102,12 +131,19 @@ function newSession() {
                 使用本地 ChatClient 适配器，消息会写入 ai_session 和 ai_message。
               </p>
 
-              <UiInput
-                v-model="clientId"
-                class="mt-5"
-              >
-                <template #label>Client ID</template>
-              </UiInput>
+              <label class="mt-5 block">
+                <span class="mb-2 block text-sm font-semibold text-text-secondary">Client</span>
+                <select
+                  v-model="clientId"
+                  class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
+                  :disabled="clients.length === 0"
+                >
+                  <option v-for="client in clients" :key="client.clientId" :value="client.clientId">
+                    {{ clientLabel(client) }}
+                  </option>
+                </select>
+              </label>
+              <p v-if="clientError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ clientError }}</p>
 
               <UiButton variant="primary" full-width class="mt-4" @click="newSession">
                 新会话
@@ -135,7 +171,7 @@ function newSession() {
               <p class="font-mono text-sm text-text-tertiary">{{ sessionId || '新会话' }}</p>
             </div>
 
-            <div class="flex-1 space-y-4 overflow-y-auto p-5 scroll-smooth-thin">
+            <div class="flex-1 space-y-5 overflow-y-auto px-6 py-5 scroll-smooth-thin">
               <ChatMessage
                 v-for="message in messages"
                 :key="message.messageId"
@@ -150,7 +186,7 @@ function newSession() {
 
             <ChatInput
               v-model="content"
-              :loading="loading"
+              :loading="!canSend"
               :error="error"
               @send="send"
             />

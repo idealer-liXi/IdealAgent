@@ -10,24 +10,39 @@ const isUser = computed(() => props.role === 'user')
 </script>
 
 <template>
-  <article
-    class="message-appear max-w-3xl rounded-card-lg px-5 py-4 leading-7"
-    :class="isUser
-      ? 'ml-auto border-l-4 border-l-accent bg-elevated text-text-primary'
-      : 'mr-auto bg-surface text-text-primary'
-    "
+  <div
+    class="message-appear flex items-start gap-3"
+    :class="isUser ? 'flex-row-reverse' : 'flex-row'"
   >
-    <div class="flex items-center gap-2 mb-2">
-      <div
-        class="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
-        :class="isUser ? 'bg-accent text-white' : 'bg-text-tertiary text-white'"
-      >
-        {{ isUser ? 'U' : 'A' }}
-      </div>
-      <span class="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-        {{ role }}
-      </span>
+    <!-- Avatar -->
+    <div
+      class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full select-none overflow-hidden"
+      :class="isUser
+        ? 'bg-accent text-white text-xs font-bold'
+        : 'bg-surface border border-border-default'
+      "
+    >
+      <span v-if="isUser">我</span>
+      <span v-else class="text-lg">🤖</span>
     </div>
-    <p class="whitespace-pre-wrap text-sm">{{ content }}</p>
-  </article>
+
+    <!-- Bubble Column -->
+    <div class="flex flex-col max-w-[75%]" :class="isUser ? 'items-end' : 'items-start'">
+      <!-- Name Tag -->
+      <span class="text-[11px] text-text-tertiary mb-1 px-0.5">
+        {{ isUser ? '我' : 'IdealAgent' }}
+      </span>
+
+      <!-- Message Bubble -->
+      <div
+        class="relative px-4 py-2.5 text-sm leading-6 whitespace-pre-wrap break-words"
+        :class="isUser
+          ? 'bg-accent text-white rounded-t-2xl rounded-l-2xl rounded-br-sm'
+          : 'bg-white border border-border-subtle text-text-primary rounded-t-2xl rounded-r-2xl rounded-bl-sm'
+        "
+      >
+        {{ content }}
+      </div>
+    </div>
+  </div>
 </template>
