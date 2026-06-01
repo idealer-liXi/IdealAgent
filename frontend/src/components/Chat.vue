@@ -191,7 +191,7 @@ function newSession() {
 
             <ChatInput
               v-model="content"
-              :loading="!canSend"
+              :loading="loading"
               :error="error"
               @send="send"
             />

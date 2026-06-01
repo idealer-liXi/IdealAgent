@@ -23,20 +23,21 @@ function handleSend() {
     <div v-if="error" class="mb-3 rounded-card-md bg-error-bg px-4 py-3 text-sm text-error">
       {{ error }}
     </div>
-    <form class="flex flex-col gap-3 md:flex-row" @submit.prevent="handleSend">
+    <form class="flex flex-col gap-3 md:flex-row md:items-start" @submit.prevent="handleSend">
       <UiInput
         type="textarea"
         :model-value="modelValue"
-        placeholder="输入消息，Enter+点击发送"
+        placeholder="输入消息，Ctrl+Enter 发送"
         :rows="3"
         class="flex-1"
         @update:model-value="$emit('update:modelValue', $event)"
       />
       <UiButton
         variant="primary"
-        size="lg"
+        size="md"
         :loading="loading"
-        :disabled="!modelValue.trim()"
+        :disabled="!modelValue.trim() || loading"
+        class="shrink-0 self-start"
         @click="handleSend"
       >
         <template v-if="loading">
