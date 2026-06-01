@@ -1,6 +1,7 @@
 package com.idealagent.trigger.handler;
 
 import com.idealagent.domain.auth.service.AuthException;
+import com.idealagent.domain.config.service.AiConfigException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -13,6 +14,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Result<Void> handleAuthException(AuthException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(AiConfigException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleAiConfigException(AiConfigException e) {
         return Result.failure(e.getMessage());
     }
 

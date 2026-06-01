@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.idealagent.infrastructure.persistent.dao.IAiConfigDao">
+    <resultMap id="dataMap" type="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        <id column="config_id" property="configId"/>
+        <result column="name" property="name"/>
+        <result column="type" property="type"/>
+        <result column="content" property="content"/>
+        <result column="secret" property="secret"/>
+        <result column="ref_id" property="refId"/>
+        <result column="status" property="status"/>
+        <result column="owner_id" property="ownerId"/>
+        <result column="owner_type" property="ownerType"/>
+        <result column="config_type" property="configType"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <insert id="insertApi" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_api (api_id, api_name, base_url, api_key, api_type, api_status, api_from)
+        VALUES (#{configId}, #{name}, #{content}, #{secret}, #{type}, #{status}, #{ownerId})
+    </insert>
+
+    <select id="listApis" resultMap="dataMap">
+        SELECT api_id AS config_id, api_name AS name, api_type AS type, base_url AS content,
+               api_key AS secret, NULL AS ref_id, api_status AS status, api_from AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_api
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertModel" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_model (model_id, api_id, model_name, model_type, model_status, model_from)
+        VALUES (#{configId}, #{refId}, #{name}, #{type}, #{status}, #{ownerId})
+    </insert>
+
+    <select id="listModels" resultMap="dataMap">
+        SELECT model_id AS config_id, model_name AS name, model_type AS type, NULL AS content,
+               NULL AS secret, api_id AS ref_id, model_status AS status, model_from AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_model
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertClient" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_client (client_id, client_type, client_role, model_id, model_name, client_name, client_status, client_from)
+        VALUES (#{configId}, #{type}, #{content}, #{refId}, #{secret}, #{name}, #{status}, #{ownerId})
+    </insert>
+
+    <select id="listClients" resultMap="dataMap">
+        SELECT client_id AS config_id, client_name AS name, client_type AS type, client_role AS content,
+               model_name AS secret, model_id AS ref_id, client_status AS status, client_from AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_client
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertPrompt" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_prompt (prompt_id, prompt_name, prompt_type, prompt_content, prompt_status, prompt_from)
+        VALUES (#{configId}, #{name}, #{type}, #{content}, #{status}, #{ownerId})
+    </insert>
+
+    <select id="listPrompts" resultMap="dataMap">
+        SELECT prompt_id AS config_id, prompt_name AS name, prompt_type AS type, prompt_content AS content,
+               NULL AS secret, NULL AS ref_id, prompt_status AS status, prompt_from AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_prompt
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertAdvisor" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_advisor (advisor_id, advisor_name, advisor_type, advisor_config, advisor_status)
+        VALUES (#{configId}, #{name}, #{type}, #{content}, #{status})
+    </insert>
+
+    <select id="listAdvisors" resultMap="dataMap">
+        SELECT advisor_id AS config_id, advisor_name AS name, advisor_type AS type, advisor_config AS content,
+               NULL AS secret, NULL AS ref_id, advisor_status AS status, 0 AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_advisor
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertMcp" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_mcp (mcp_id, mcp_name, mcp_type, mcp_config, mcp_secret, mcp_status, mcp_from)
+        VALUES (#{configId}, #{name}, #{type}, #{content}, #{secret}, #{status}, #{ownerId})
+    </insert>
+
+    <select id="listMcps" resultMap="dataMap">
+        SELECT mcp_id AS config_id, mcp_name AS name, mcp_type AS type, mcp_config AS content,
+               mcp_secret AS secret, NULL AS ref_id, mcp_status AS status, mcp_from AS owner_id,
+               NULL AS owner_type, NULL AS config_type, create_time, update_time
+        FROM ai_mcp
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insertConfig" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        INSERT INTO ai_config (config_id, owner_id, owner_type, config_type, ref_id, config_status)
+        VALUES (#{configId}, COALESCE(#{content}, CAST(#{ownerId} AS CHAR)), COALESCE(#{ownerType}, #{type}), COALESCE(#{configType}, #{secret}), #{refId}, #{status})
+    </insert>
+
+    <select id="listConfigs" resultMap="dataMap">
+        SELECT config_id, owner_id AS content, '' AS name, owner_type AS type,
+               config_type AS secret, ref_id, config_status AS status, 0 AS owner_id,
+               owner_type, config_type, create_time, update_time
+        FROM ai_config
+        ORDER BY id DESC
+    </select>
+</mapper>

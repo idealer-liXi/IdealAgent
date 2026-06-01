@@ -1,7 +1,7 @@
 USE ideal_agent;
 
 INSERT INTO ai_user (user_name, password, user_role, user_avatar, user_status)
-VALUES ('admin', '$2a$10$example.replace.with.real.bcrypt.hash', 'admin', NULL, 1)
+VALUES ('admin', '$2a$10$yDKp/kH2Tw245JMbIfEPT.wXo5BZkxMWqzZI5T.AAibK2/vXfXMYC', 'admin', NULL, 1)
 ON DUPLICATE KEY UPDATE user_role = VALUES(user_role), user_status = VALUES(user_status);
 
 INSERT INTO ai_api (api_id, api_name, base_url, api_key, api_type, api_status, api_from)

@@ -1,11 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Welcome from '../components/Welcome.vue'
 import Auth from '../components/Auth.vue'
+import AiConfig from '../components/AiConfig.vue'
 import { getToken } from '../utils/auth'
 
 const routes = [
   { path: '/auth', name: 'auth', component: Auth },
-  { path: '/', name: 'welcome', component: Welcome, meta: { requiresAuth: true } }
+  { path: '/', name: 'welcome', component: Welcome, meta: { requiresAuth: true } },
+  { path: '/config', name: 'config', component: AiConfig, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({

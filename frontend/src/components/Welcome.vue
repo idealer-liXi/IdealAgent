@@ -32,12 +32,13 @@ function logout() {
         <p class="text-sm font-semibold uppercase tracking-[0.35em] text-cyan-300">IdealAgent</p>
         <div class="flex items-center gap-3 text-sm text-slate-300">
           <span v-if="profile">{{ profile.userName }} · {{ profile.userRole }}</span>
+          <RouterLink class="rounded-full border border-slate-700 px-4 py-2 text-cyan-200" to="/config">配置中心</RouterLink>
           <button class="rounded-full border border-slate-700 px-4 py-2 text-cyan-200" @click="logout">退出</button>
         </div>
       </div>
       <h1 class="mt-5 text-4xl font-black tracking-tight md:text-6xl">MiniAgent learning rebuild</h1>
       <p class="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-        This shell is the first milestone. Later milestones add auth, chat, RAG, MCP tools, Work Agent workflows, workspace pages, and admin panels.
+        Stage 3 adds API, model, client, prompt, advisor, MCP, and binding configuration management. Later milestones connect these records to chat, RAG, MCP tools, and Work Agent workflows.
       </p>
       <div class="mt-8 grid gap-4 md:grid-cols-3">
         <div class="rounded-2xl bg-slate-800/70 p-5">
