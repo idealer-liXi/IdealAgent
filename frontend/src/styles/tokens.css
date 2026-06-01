@@ -1,0 +1,110 @@
+:root {
+  /* Background */
+  --color-bg-base: #ffffff;
+  --color-bg-surface: #f8f9fa;
+  --color-bg-elevated: #ffffff;
+  --color-bg-dark: #1a1a2e;
+
+  /* Text */
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #6b7280;
+  --color-text-tertiary: #9ca3af;
+  --color-text-inverse: #ffffff;
+
+  /* Border */
+  --color-border-subtle: #f1f3f5;
+  --color-border-default: #e5e7eb;
+  --color-border-focus: #2563eb;
+
+  /* Accent */
+  --color-accent: #2563eb;
+  --color-accent-hover: #1d4ed8;
+  --color-accent-light: #eff6ff;
+
+  /* Status */
+  --color-error: #ef4444;
+  --color-error-bg: #fef2f2;
+  --color-success: #10b981;
+  --color-success-bg: #ecfdf5;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-sidebar: 4px 0 16px rgba(0, 0, 0, 0.04);
+}
+
+/* Global transition utilities */
+.transition-card {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Page fade-in */
+.page-enter {
+  animation: pageFadeIn 200ms ease-out;
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Message appear animation */
+.message-appear {
+  animation: messageAppear 250ms ease-out;
+}
+
+@keyframes messageAppear {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Sidebar indicator slide */
+.nav-indicator {
+  transition: transform 200ms ease-out, opacity 200ms ease-out;
+}
+
+/* Button active scale */
+.btn-active:active {
+  transform: scale(0.97);
+}
+
+/* Smooth scrollbar for chat */
+.scroll-smooth-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-smooth-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-smooth-thin::-webkit-scrollbar-thumb {
+  background-color: var(--color-border-default);
+  border-radius: var(--radius-full);
+}
+.scroll-smooth-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-tertiary);
+}

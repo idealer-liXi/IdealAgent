@@ -3,6 +3,8 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '../request/request'
 import { setAuth } from '../utils/auth'
+import UiButton from './ui/UiButton.vue'
+import UiInput from './ui/UiInput.vue'
 
 const router = useRouter()
 const mode = ref('login')
@@ -35,32 +37,54 @@ async function submit() {
 </script>
 
 <template>
-  <main class="flex min-h-screen items-center justify-center bg-slate-950 px-6 py-12 text-slate-100">
-    <section class="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl shadow-black/40">
-      <p class="text-sm font-semibold uppercase tracking-[0.35em] text-cyan-300">IdealAgent</p>
-      <h1 class="mt-4 text-3xl font-black">{{ mode === 'login' ? '登录' : '注册' }}</h1>
-      <p class="mt-2 text-sm text-slate-400">第二阶段认证闭环：Token、请求拦截、用户上下文。</p>
+  <main class="flex min-h-screen items-center justify-center bg-elevated px-6 py-12">
+    <section class="w-full max-w-md page-enter">
+      <div class="rounded-card-xl border border-border-default bg-elevated p-8 shadow-card-lg">
+        <!-- Logo -->
+        <div class="text-center">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-card-lg bg-accent text-2xl font-bold text-white">
+            IA
+          </div>
+          <h1 class="mt-5 text-2xl font-bold text-text-primary">IdealAgent</h1>
+          <p class="mt-2 text-sm text-text-secondary">{{ mode === 'login' ? '登录到您的账户' : '创建新账户' }}</p>
+        </div>
 
-      <form class="mt-8 space-y-5" @submit.prevent="submit">
-        <label class="block">
-          <span class="text-sm text-slate-300">用户名</span>
-          <input v-model="userName" class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-cyan-300" autocomplete="username" />
-        </label>
-        <label class="block">
-          <span class="text-sm text-slate-300">密码</span>
-          <input v-model="password" type="password" class="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 outline-none focus:border-cyan-300" autocomplete="current-password" />
-        </label>
+        <form class="mt-8 space-y-5" @submit.prevent="submit">
+          <UiInput
+            v-model="userName"
+            placeholder="请输入用户名"
+            autocomplete="username"
+          >
+            <template #label>用户名</template>
+          </UiInput>
 
-        <p v-if="error" class="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">{{ error }}</p>
+          <UiInput
+            v-model="password"
+            type="password"
+            placeholder="请输入密码"
+            autocomplete="current-password"
+          >
+            <template #label>密码</template>
+          </UiInput>
 
-        <button class="w-full rounded-xl bg-cyan-300 px-4 py-3 font-bold text-slate-950 disabled:opacity-60" :disabled="loading">
-          {{ loading ? '处理中...' : (mode === 'login' ? '登录' : '注册并登录') }}
-        </button>
-      </form>
+          <div v-if="error" class="rounded-card-md bg-error-bg px-4 py-3 text-sm text-error">
+            {{ error }}
+          </div>
 
-      <button class="mt-5 text-sm text-cyan-200" @click="mode = mode === 'login' ? 'register' : 'login'">
-        {{ mode === 'login' ? '没有账号？注册' : '已有账号？登录' }}
-      </button>
+          <UiButton variant="primary" size="lg" full-width :loading="loading" @click="submit">
+            {{ loading ? '处理中...' : (mode === 'login' ? '登录' : '注册并登录') }}
+          </UiButton>
+        </form>
+
+        <div class="mt-6 text-center">
+          <button
+            class="text-sm text-text-secondary hover:text-accent transition-colors"
+            @click="mode = mode === 'login' ? 'register' : 'login'"
+          >
+            {{ mode === 'login' ? '没有账号？注册' : '已有账号？登录' }}
+          </button>
+        </div>
+      </div>
     </section>
   </main>
 </template>
