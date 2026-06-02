@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 @Service
 public class ChatService {
@@ -55,6 +56,27 @@ public class ChatService {
         List<ChatMessage> promptHistory = withRagContext(userId, request, history);
         String assistantContent = chatClient.complete(clientId, promptHistory);
         ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent));
+
+        return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
+    }
+
+    public ChatResponseVO stream(Long userId, ChatRequestDTO request, Consumer<String> onDelta) {
+        validate(userId, request);
+        String sessionId = StringUtils.hasText(request.sessionId()) ? request.sessionId() : id("session_");
+        String clientId = StringUtils.hasText(request.clientId()) ? request.clientId() : LOCAL_ECHO_CLIENT;
+        ensureSession(userId, sessionId, request);
+
+        ChatMessage userMessage = message(sessionId, USER_ROLE, request.content());
+        chatRepository.saveMessage(userMessage);
+
+        List<ChatMessage> history = new ArrayList<>(chatRepository.listMessages(sessionId, userId));
+        List<ChatMessage> promptHistory = withRagContext(userId, request, history);
+        StringBuilder assistantContent = new StringBuilder();
+        chatClient.stream(clientId, promptHistory, delta -> {
+            assistantContent.append(delta);
+            onDelta.accept(delta);
+        });
+        ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent.toString()));
 
         return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
     }

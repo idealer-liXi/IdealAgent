@@ -21,8 +21,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Component
 public class OpenAiCompatibleChatClient implements IChatClient {
@@ -49,7 +52,7 @@ public class OpenAiCompatibleChatClient implements IChatClient {
             return localEcho(clientId, history);
         }
         ClientConfig config = resolveConfig(clientId);
-        OpenAiResponse response = transport.post(chatCompletionUrl(config.api().getContent()), headers(config.api()), requestBody(config.model(), history));
+        OpenAiResponse response = transport.post(chatCompletionUrl(config.api().getContent()), headers(config.api()), requestBody(config.model(), history, false));
         if (response == null) {
             throw new ChatException("模型调用失败：响应为空");
         }
@@ -57,6 +60,16 @@ public class OpenAiCompatibleChatClient implements IChatClient {
             throw new ChatException("模型调用失败：" + response.body());
         }
         return assistantContent(response.body());
+    }
+
+    @Override
+    public void stream(String clientId, List<ChatMessage> history, Consumer<String> onDelta) {
+        if (!StringUtils.hasText(clientId) || LOCAL_ECHO_CLIENT.equals(clientId)) {
+            onDelta.accept(localEcho(clientId, history));
+            return;
+        }
+        ClientConfig config = resolveConfig(clientId);
+        transport.stream(chatCompletionUrl(config.api().getContent()), headers(config.api()), requestBody(config.model(), history, true), line -> emitDelta(line, onDelta));
     }
 
     private ClientConfig resolveConfig(String clientId) {
@@ -96,7 +109,7 @@ public class OpenAiCompatibleChatClient implements IChatClient {
         return headers;
     }
 
-    private String requestBody(AiConfigRecord model, List<ChatMessage> history) {
+    private String requestBody(AiConfigRecord model, List<ChatMessage> history, boolean stream) {
         List<String> messages = new ArrayList<>();
         for (ChatMessage item : history) {
             if (!StringUtils.hasText(item.getRole()) || !StringUtils.hasText(item.getContent())) {
@@ -104,7 +117,24 @@ public class OpenAiCompatibleChatClient implements IChatClient {
             }
             messages.add("{\"role\":\"" + jsonEscape(item.getRole()) + "\",\"content\":\"" + jsonEscape(item.getContent()) + "\"}");
         }
-        return "{\"model\":\"" + jsonEscape(model.getName()) + "\",\"stream\":false,\"messages\":[" + String.join(",", messages) + "]}";
+        return "{\"model\":\"" + jsonEscape(model.getName()) + "\",\"stream\":" + stream + ",\"messages\":[" + String.join(",", messages) + "]}";
+    }
+
+    private void emitDelta(String line, Consumer<String> onDelta) {
+        if (!StringUtils.hasText(line) || !line.startsWith("data:")) {
+            return;
+        }
+        String data = line.substring("data:".length()).trim();
+        if ("[DONE]".equals(data)) {
+            return;
+        }
+        Matcher matcher = CONTENT_PATTERN.matcher(data);
+        if (matcher.find()) {
+            String content = jsonUnescape(matcher.group(1));
+            if (!content.isEmpty()) {
+                onDelta.accept(content);
+            }
+        }
     }
 
     private String assistantContent(String body) {
@@ -183,6 +213,8 @@ public class OpenAiCompatibleChatClient implements IChatClient {
 
     interface OpenAiTransport {
         OpenAiResponse post(String url, Map<String, String> headers, String body);
+
+        void stream(String url, Map<String, String> headers, String body, Consumer<String> onLine);
     }
 
     private record ClientConfig(AiConfigRecord client, AiConfigRecord model, AiConfigRecord api) {
@@ -202,6 +234,28 @@ public class OpenAiCompatibleChatClient implements IChatClient {
                 headers.forEach(request::header);
                 HttpResponse<String> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
                 return new OpenAiResponse(response.statusCode(), response.body());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ChatException("模型调用被中断");
+            } catch (IOException | IllegalArgumentException e) {
+                throw new ChatException("模型调用失败：" + e.getMessage());
+            }
+        }
+
+        @Override
+        public void stream(String url, Map<String, String> headers, String body, Consumer<String> onLine) {
+            try {
+                HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(url))
+                        .timeout(Duration.ofSeconds(120))
+                        .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));
+                headers.forEach(request::header);
+                HttpResponse<Stream<String>> response = httpClient.send(request.build(), HttpResponse.BodyHandlers.ofLines());
+                try (Stream<String> lines = response.body()) {
+                    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                        throw new ChatException("模型调用失败：" + lines.collect(Collectors.joining("\n")));
+                    }
+                    lines.forEach(onLine);
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new ChatException("模型调用被中断");

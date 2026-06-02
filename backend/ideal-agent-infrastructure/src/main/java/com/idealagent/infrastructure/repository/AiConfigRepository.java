@@ -46,6 +46,47 @@ public class AiConfigRepository implements IAiConfigRepository {
         return records.stream().map(this::toDomain).toList();
     }
 
+    @Override
+    public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
+        AiConfigData data = toData(record);
+        switch (kind) {
+            case API -> aiConfigDao.updateApi(data);
+            case MODEL -> aiConfigDao.updateModel(data);
+            case CLIENT -> aiConfigDao.updateClient(data);
+            case PROMPT -> aiConfigDao.updatePrompt(data);
+            case ADVISOR -> aiConfigDao.updateAdvisor(data);
+            case MCP -> aiConfigDao.updateMcp(data);
+            case CONFIG -> aiConfigDao.updateConfig(data);
+        }
+        return record;
+    }
+
+    @Override
+    public void updateStatus(ConfigKind kind, String configId, Integer status) {
+        switch (kind) {
+            case API -> aiConfigDao.updateApiStatus(configId, status);
+            case MODEL -> aiConfigDao.updateModelStatus(configId, status);
+            case CLIENT -> aiConfigDao.updateClientStatus(configId, status);
+            case PROMPT -> aiConfigDao.updatePromptStatus(configId, status);
+            case ADVISOR -> aiConfigDao.updateAdvisorStatus(configId, status);
+            case MCP -> aiConfigDao.updateMcpStatus(configId, status);
+            case CONFIG -> aiConfigDao.updateConfigStatus(configId, status);
+        }
+    }
+
+    @Override
+    public void delete(ConfigKind kind, String configId) {
+        switch (kind) {
+            case API -> aiConfigDao.deleteApi(configId);
+            case MODEL -> aiConfigDao.deleteModel(configId);
+            case CLIENT -> aiConfigDao.deleteClient(configId);
+            case PROMPT -> aiConfigDao.deletePrompt(configId);
+            case ADVISOR -> aiConfigDao.deleteAdvisor(configId);
+            case MCP -> aiConfigDao.deleteMcp(configId);
+            case CONFIG -> aiConfigDao.deleteConfig(configId);
+        }
+    }
+
     private AiConfigData toData(AiConfigRecord record) {
         AiConfigData data = new AiConfigData();
         data.setConfigId(record.getConfigId());

@@ -88,6 +88,19 @@ class ChatServiceTest {
     }
 
     @Test
+    void streamEmitsDeltasAndPersistsFullAssistantMessage() {
+        chatClient.streamDeltas = List.of("你", "好");
+        List<String> deltas = new ArrayList<>();
+
+        ChatResponseVO response = chatService.stream(7L, new ChatRequestDTO(null, "client_default_chat", "你好"), deltas::add);
+
+        assertThat(deltas).containsExactly("你", "好");
+        assertThat(response.assistantMessage().content()).isEqualTo("你好");
+        assertThat(repository.messages).extracting(ChatMessage::getRole).containsExactly("user", "assistant");
+        assertThat(repository.messages.get(1).getContent()).isEqualTo("你好");
+    }
+
+    @Test
     void listClientsReturnsEnabledClientOptions() {
         configRepository.records.add(clientRecord("client_default_chat", "Default Chat", "chat", "model_default_chat", "gpt-4o-mini", 1));
         configRepository.records.add(clientRecord("client_disabled", "Disabled", "chat", "model_disabled", "gpt-disabled", 0));
@@ -151,12 +164,20 @@ class ChatServiceTest {
     private static class RecordingChatClient implements IChatClient {
         private List<ChatMessage> lastHistory = List.of();
         private String lastClientId;
+        private List<String> streamDeltas = List.of();
 
         @Override
         public String complete(String clientId, List<ChatMessage> history) {
             lastClientId = clientId;
             lastHistory = List.copyOf(history);
             return "Echo: " + history.get(history.size() - 1).getContent();
+        }
+
+        @Override
+        public void stream(String clientId, List<ChatMessage> history, java.util.function.Consumer<String> onDelta) {
+            lastClientId = clientId;
+            lastHistory = List.copyOf(history);
+            streamDeltas.forEach(onDelta);
         }
     }
 
@@ -172,6 +193,23 @@ class ChatServiceTest {
         @Override
         public List<AiConfigRecord> list(ConfigKind kind) {
             return kind == ConfigKind.CLIENT ? records : List.of();
+        }
+
+        @Override
+        public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
+            records.removeIf(item -> item.getConfigId().equals(record.getConfigId()));
+            records.add(record);
+            return record;
+        }
+
+        @Override
+        public void updateStatus(ConfigKind kind, String configId, Integer status) {
+            records.stream().filter(item -> item.getConfigId().equals(configId)).forEach(item -> item.setStatus(status));
+        }
+
+        @Override
+        public void delete(ConfigKind kind, String configId) {
+            records.removeIf(item -> item.getConfigId().equals(configId));
         }
     }
 

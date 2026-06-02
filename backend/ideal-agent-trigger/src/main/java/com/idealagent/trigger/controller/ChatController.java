@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/chat")
@@ -51,14 +52,25 @@ public class ChatController {
     @PostMapping("/stream")
     public SseEmitter stream(@RequestBody ChatRequestDTO request) {
         SseEmitter emitter = new SseEmitter(60_000L);
-        try {
-            ChatResponseVO response = chatService.send(UserContext.userId(), request);
-            emitter.send(SseEmitter.event().name("message").data(response));
-            emitter.send(SseEmitter.event().name("done").data(response.sessionId()));
-            emitter.complete();
-        } catch (IOException e) {
-            emitter.completeWithError(e);
-        }
+        Long userId = UserContext.userId();
+        CompletableFuture.runAsync(() -> {
+            try {
+                ChatResponseVO response = chatService.stream(userId, request, delta -> sendEvent(emitter, "delta", delta));
+                sendEvent(emitter, "done", response);
+                emitter.complete();
+            } catch (Exception e) {
+                sendEvent(emitter, "error", e.getMessage());
+                emitter.complete();
+            }
+        });
         return emitter;
+    }
+
+    private void sendEvent(SseEmitter emitter, String name, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(name).data(data));
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

@@ -23,7 +23,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -65,5 +68,36 @@ class AiConfigControllerTest {
                         .header("Authorization", "Bearer token-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].configId").value("model_gpt"));
+    }
+
+    @Test
+    void updateApiConfigurationReturnsRecord() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+        when(aiConfigService.update(eq(ConfigKind.API), eq("api_deepseek"), any(AiConfigRecordDTO.class)))
+                .thenReturn(new AiConfigRecordVO("api_deepseek", "DeepSeek", "openai", "https://api.deepseek.com", "sk-test", null, 1, 0L, null, null, null, null));
+
+        mockMvc.perform(put("/ai/config/api/api_deepseek")
+                        .header("Authorization", "Bearer token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"DeepSeek\",\"type\":\"openai\",\"content\":\"https://api.deepseek.com\",\"secret\":\"sk-test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.configId").value("api_deepseek"));
+    }
+
+    @Test
+    void updateStatusAndDeleteConfiguration() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+
+        mockMvc.perform(patch("/ai/config/client/client_chat/status")
+                        .header("Authorization", "Bearer token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
+
+        mockMvc.perform(delete("/ai/config/client/client_chat")
+                        .header("Authorization", "Bearer token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0000"));
     }
 }

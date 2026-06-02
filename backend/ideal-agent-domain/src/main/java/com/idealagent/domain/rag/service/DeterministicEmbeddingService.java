@@ -1,12 +1,9 @@
 package com.idealagent.domain.rag.service;
 
-import org.springframework.stereotype.Service;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-@Service
 public class DeterministicEmbeddingService implements IEmbeddingService {
     public static final int DIMENSION = 1024;
 

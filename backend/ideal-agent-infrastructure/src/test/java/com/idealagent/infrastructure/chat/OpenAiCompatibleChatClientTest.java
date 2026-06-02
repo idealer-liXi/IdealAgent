@@ -59,6 +59,23 @@ class OpenAiCompatibleChatClientTest {
     }
 
     @Test
+    void streamParsesOpenAiCompatibleDeltaEvents() {
+        repository.records.add(api("api_deepseek", "https://api.deepseek.com", "sk-test"));
+        repository.records.add(model("model_deepseek_v4_flash", "deepseek-v4-flash", "api_deepseek"));
+        repository.records.add(client("client_deepseek_v4_flash", "model_deepseek_v4_flash"));
+        transport.streamLines = List.of(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}",
+                "data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}",
+                "data: [DONE]");
+        List<String> deltas = new ArrayList<>();
+
+        chatClient.stream("client_deepseek_v4_flash", List.of(message("user", "你好")), deltas::add);
+
+        assertThat(deltas).containsExactly("你", "好");
+        assertThat(transport.body).contains("\"stream\":true");
+    }
+
+    @Test
     void completeRejectsMissingClientConfiguration() {
         assertThatThrownBy(() -> chatClient.complete("client_missing", List.of(message("user", "你好"))))
                 .isInstanceOf(ChatException.class)
@@ -119,6 +136,7 @@ class OpenAiCompatibleChatClientTest {
         private Map<String, String> headers;
         private String body;
         private OpenAiCompatibleChatClient.OpenAiResponse response;
+        private List<String> streamLines = List.of();
 
         @Override
         public OpenAiCompatibleChatClient.OpenAiResponse post(String url, Map<String, String> headers, String body) {
@@ -126,6 +144,14 @@ class OpenAiCompatibleChatClientTest {
             this.headers = new HashMap<>(headers);
             this.body = body;
             return response;
+        }
+
+        @Override
+        public void stream(String url, Map<String, String> headers, String body, java.util.function.Consumer<String> onLine) {
+            this.url = url;
+            this.headers = new HashMap<>(headers);
+            this.body = body;
+            streamLines.forEach(onLine);
         }
     }
 
@@ -141,6 +167,23 @@ class OpenAiCompatibleChatClientTest {
         @Override
         public List<AiConfigRecord> list(ConfigKind kind) {
             return records.stream().filter(record -> record.getOwnerType().equals(kind.name())).toList();
+        }
+
+        @Override
+        public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
+            records.removeIf(item -> item.getConfigId().equals(record.getConfigId()));
+            records.add(record);
+            return record;
+        }
+
+        @Override
+        public void updateStatus(ConfigKind kind, String configId, Integer status) {
+            records.stream().filter(item -> item.getConfigId().equals(configId)).forEach(item -> item.setStatus(status));
+        }
+
+        @Override
+        public void delete(ConfigKind kind, String configId) {
+            records.removeIf(item -> item.getConfigId().equals(configId));
         }
     }
 }

@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import request from '../request/request'
-import { getStoredProfile } from '../utils/auth'
+import { getStoredProfile, getToken } from '../utils/auth'
 import Sidebar from './Sidebar.vue'
 import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
@@ -31,6 +31,22 @@ const sessions = ref([])
 const error = ref('')
 const loading = ref(false)
 const isLocalEchoMode = computed(() => !clientId.value)
+
+const messageListRef = ref(null)
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (messageListRef.value) {
+      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
+    }
+  })
+}
+
+watch(
+  () => messages.value,
+  () => scrollToBottom(),
+  { deep: true }
+)
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadClients()])
@@ -154,6 +170,7 @@ async function loadMessages(nextSessionId) {
   try {
     const response = await request.get(`/chat/messages/${nextSessionId}`)
     messages.value = response.data.data || []
+    scrollToBottom()
   } catch (e) {
     error.value = e.response?.data?.message || '消息加载失败'
   }
@@ -172,27 +189,98 @@ async function send() {
     role: 'user',
     content: content.value
   }
+  const assistantMessage = {
+    messageId: `local_assistant_${Date.now()}`,
+    sessionId: sessionId.value,
+    role: 'assistant',
+    content: ''
+  }
   messages.value.push(userMessage)
+  messages.value.push(assistantMessage)
   const currentContent = content.value
   content.value = ''
   try {
-    const response = await request.post('/chat/send', {
-      sessionId: sessionId.value || null,
-      clientId: clientId.value || null,
-      content: currentContent,
-      ragTag: isLocalEchoMode.value ? null : selectedRagTag.value || null
+    const response = await fetch('/api/v1/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {})
+      },
+      body: JSON.stringify({
+        sessionId: sessionId.value || null,
+        clientId: clientId.value || null,
+        content: currentContent,
+        ragTag: isLocalEchoMode.value ? null : selectedRagTag.value || null
+      })
     })
-    if (response.data.code !== '0000') {
-      error.value = response.data.message || '发送失败'
-      return
+    if (!response.ok || !response.body) {
+      throw new Error('发送失败')
     }
-    sessionId.value = response.data.data.sessionId
-    messages.value.push(response.data.data.assistantMessage)
+    await readStream(response, assistantMessage)
     await loadSessions()
   } catch (e) {
-    error.value = e.response?.data?.message || '发送失败'
+    error.value = e.message || '发送失败'
+    if (!assistantMessage.content) {
+      messages.value = messages.value.filter(message => message.messageId !== assistantMessage.messageId)
+    }
   } finally {
     loading.value = false
+  }
+}
+
+async function readStream(response, assistantMessage) {
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+    buffer += decoder.decode(value, { stream: true })
+    buffer = consumeSseBuffer(buffer, assistantMessage)
+  }
+  buffer += decoder.decode()
+  consumeSseBuffer(buffer, assistantMessage)
+}
+
+function consumeSseBuffer(buffer, assistantMessage) {
+  let next = buffer.replace(/\r\n/g, '\n')
+  let separatorIndex = next.indexOf('\n\n')
+  while (separatorIndex >= 0) {
+    const block = next.slice(0, separatorIndex)
+    handleSseBlock(block, assistantMessage)
+    next = next.slice(separatorIndex + 2)
+    separatorIndex = next.indexOf('\n\n')
+  }
+  return next
+}
+
+function handleSseBlock(block, assistantMessage) {
+  const lines = block.split(/\r?\n/)
+  let eventName = 'message'
+  const data = []
+  lines.forEach(line => {
+    if (line.startsWith('event:')) {
+      eventName = line.slice('event:'.length).trim()
+    }
+    if (line.startsWith('data:')) {
+      data.push(line.slice('data:'.length).trimStart())
+    }
+  })
+  const payload = data.join('\n')
+  if (eventName === 'delta') {
+    assistantMessage.content += payload
+    return
+  }
+  if (eventName === 'done') {
+    const result = JSON.parse(payload)
+    sessionId.value = result.sessionId
+    Object.assign(assistantMessage, result.assistantMessage)
+    return
+  }
+  if (eventName === 'error') {
+    throw new Error(payload || '发送失败')
   }
 }
 
@@ -208,90 +296,94 @@ function newSession() {
   <div class="flex h-screen bg-surface text-text-primary">
     <Sidebar />
     <div class="flex min-w-0 flex-1 flex-col">
-      <main class="flex-1 overflow-auto p-5">
-        <section class="grid min-h-full gap-5 lg:grid-cols-[380px_minmax(0,1fr)] page-enter">
+      <main class="flex-1 overflow-hidden p-5 flex flex-col">
+        <section class="grid flex-1 gap-5 lg:grid-cols-[380px_minmax(0,1fr)] page-enter min-h-0">
           <!-- Left Panel -->
-          <aside class="flex flex-col gap-5">
-            <div class="rounded-card-lg border border-border-default bg-elevated p-5 shadow-card">
-              <div class="flex items-center justify-between mb-4">
-                <div>
-                  <p class="text-xs font-semibold uppercase tracking-widest text-accent">Chat</p>
-                  <h1 class="mt-1 text-xl font-bold">Stage 4 对话</h1>
+          <aside class="flex flex-col min-h-0 overflow-hidden">
+            <div class="rounded-card-lg border border-border-default bg-elevated p-5 shadow-card flex-1 flex flex-col overflow-hidden min-h-0">
+              <div class="flex-shrink-0">
+                <div class="flex items-center justify-between mb-4">
+                  <div>
+                    <p class="text-xs font-semibold uppercase tracking-widest text-accent">Chat</p>
+                    <h1 class="mt-1 text-xl font-bold">Stage 4 对话</h1>
+                  </div>
                 </div>
-              </div>
-              <p class="text-sm text-text-secondary leading-relaxed">
-                使用本地 ChatClient 适配器，消息会写入 ai_session 和 ai_message。
-              </p>
+                <p class="text-sm text-text-secondary leading-relaxed">
+                  使用本地 ChatClient 适配器，消息会写入 ai_session 和 ai_message。
+                </p>
 
-              <label class="mt-5 block">
-                <span class="mb-2 block text-sm font-semibold text-text-secondary">Client</span>
-                <select
-                  v-model="clientId"
-                  @change="onClientChange"
-                  class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
-                >
-                  <option value="">本地回声模式</option>
-                  <option v-for="client in clients" :key="client.clientId" :value="client.clientId">
-                    {{ clientLabel(client) }}
-                  </option>
-                </select>
-              </label>
-              <p v-if="clientError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ clientError }}</p>
+                <label class="mt-5 block">
+                  <span class="mb-2 block text-sm font-semibold text-text-secondary">Client</span>
+                  <select
+                    v-model="clientId"
+                    @change="onClientChange"
+                    class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
+                  >
+                    <option value="">本地回声模式</option>
+                    <option v-for="client in clients" :key="client.clientId" :value="client.clientId">
+                      {{ clientLabel(client) }}
+                    </option>
+                  </select>
+                </label>
+                <p v-if="clientError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ clientError }}</p>
 
-              <div v-if="!isLocalEchoMode" class="mt-5 rounded-card border border-border-subtle bg-surface p-3">
-                <div class="flex items-center justify-between">
-                  <span class="text-sm font-semibold text-text-secondary">RAG 知识库</span>
-                  <button class="text-xs font-medium text-accent" type="button" @click="loadRagTags">刷新</button>
+                <div v-if="!isLocalEchoMode" class="mt-5 rounded-card border border-border-subtle bg-surface p-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold text-text-secondary">RAG 知识库</span>
+                    <button class="text-xs font-medium text-accent" type="button" @click="loadRagTags">刷新</button>
+                  </div>
+                  <select v-model="selectedRagTag" class="mt-2 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent">
+                    <option value="">不使用知识库</option>
+                    <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
+                  </select>
+
+                  <UiButton variant="secondary" size="sm" full-width class="mt-3" @click="toggleUploadPanel">
+                    {{ uploadPanelOpen ? '收起上传知识库' : '上传知识库' }}
+                  </UiButton>
+
+                  <div v-if="uploadPanelOpen" class="mt-3">
+                    <input v-model="ragTagInput" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="知识库标签" />
+                    <input class="mt-3 block w-full text-xs text-text-secondary" type="file" multiple accept=".txt,.md,.java,.html" @change="onRagFilesChange" />
+                    <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadRagFiles">上传文件</UiButton>
+
+                    <input v-model="repoUrl" class="mt-3 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Git repo URL" />
+                    <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadGitRepo">导入 Git</UiButton>
+                  </div>
+
+                  <p v-if="ragMessage" class="mt-3 rounded-card bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{{ ragMessage }}</p>
+                  <p v-if="ragError" class="mt-3 rounded-card bg-red-50 px-3 py-2 text-xs text-red-700">{{ ragError }}</p>
                 </div>
-                <select v-model="selectedRagTag" class="mt-2 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent">
-                  <option value="">不使用知识库</option>
-                  <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
-                </select>
 
-                <UiButton variant="secondary" size="sm" full-width class="mt-3" @click="toggleUploadPanel">
-                  {{ uploadPanelOpen ? '收起上传知识库' : '上传知识库' }}
+                <UiButton variant="primary" full-width class="mt-4" @click="newSession">
+                  新会话
                 </UiButton>
-
-                <div v-if="uploadPanelOpen" class="mt-3">
-                  <input v-model="ragTagInput" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="知识库标签" />
-                  <input class="mt-3 block w-full text-xs text-text-secondary" type="file" multiple accept=".txt,.md,.java,.html" @change="onRagFilesChange" />
-                  <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadRagFiles">上传文件</UiButton>
-
-                  <input v-model="repoUrl" class="mt-3 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Git repo URL" />
-                  <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadGitRepo">导入 Git</UiButton>
-                </div>
-
-                <p v-if="ragMessage" class="mt-3 rounded-card bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{{ ragMessage }}</p>
-                <p v-if="ragError" class="mt-3 rounded-card bg-red-50 px-3 py-2 text-xs text-red-700">{{ ragError }}</p>
               </div>
 
-              <UiButton variant="primary" full-width class="mt-4" @click="newSession">
-                新会话
-              </UiButton>
-
-              <div class="mt-6">
-                <div class="flex items-center justify-between mb-3">
+              <div class="mt-6 flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div class="flex items-center justify-between mb-3 flex-shrink-0">
                   <h2 class="text-sm font-semibold text-text-secondary">历史会话</h2>
                   <button class="text-sm font-medium text-accent hover:text-accent-hover transition-colors" @click="loadSessions">
                     刷新
                   </button>
                 </div>
-                <SessionList
-                  :sessions="sessions"
-                  :active-session-id="sessionId"
-                  @select="loadMessages"
-                />
+                <div class="flex-1 min-h-0 overflow-y-auto scroll-smooth-thin -mr-2 pr-2">
+                  <SessionList
+                    :sessions="sessions"
+                    :active-session-id="sessionId"
+                    @select="loadMessages"
+                  />
+                </div>
               </div>
             </div>
           </aside>
 
           <!-- Right Panel -->
-          <section class="flex min-h-[calc(100vh-6.5rem)] flex-col rounded-card-lg border border-border-default bg-elevated shadow-card">
-            <div class="border-b border-border-subtle px-5 py-4">
+          <section class="flex flex-col overflow-hidden min-h-0 rounded-card-lg border border-border-default bg-elevated shadow-card">
+            <div class="flex-shrink-0 border-b border-border-subtle px-5 py-4">
               <p class="font-mono text-sm text-text-tertiary">{{ sessionId || '新会话' }}</p>
             </div>
 
-            <div class="flex-1 space-y-5 overflow-y-auto px-6 py-5 scroll-smooth-thin">
+            <div ref="messageListRef" class="flex-1 min-h-0 space-y-5 overflow-y-auto px-6 py-5 scroll-smooth-thin">
               <ChatMessage
                 v-for="message in messages"
                 :key="message.messageId"

@@ -29,6 +29,19 @@
         ORDER BY id DESC
     </select>
 
+    <update id="updateApi" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_api SET api_name = #{name}, base_url = #{content}, api_key = #{secret}, api_type = #{type}, api_status = #{status}, api_from = #{ownerId}
+        WHERE api_id = #{configId}
+    </update>
+
+    <update id="updateApiStatus">
+        UPDATE ai_api SET api_status = #{status} WHERE api_id = #{configId}
+    </update>
+
+    <delete id="deleteApi">
+        DELETE FROM ai_api WHERE api_id = #{configId}
+    </delete>
+
     <insert id="insertModel" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_model (model_id, api_id, model_name, model_type, model_status, model_from)
         VALUES (#{configId}, #{refId}, #{name}, #{type}, #{status}, #{ownerId})
@@ -41,6 +54,19 @@
         FROM ai_model
         ORDER BY id DESC
     </select>
+
+    <update id="updateModel" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_model SET api_id = #{refId}, model_name = #{name}, model_type = #{type}, model_status = #{status}, model_from = #{ownerId}
+        WHERE model_id = #{configId}
+    </update>
+
+    <update id="updateModelStatus">
+        UPDATE ai_model SET model_status = #{status} WHERE model_id = #{configId}
+    </update>
+
+    <delete id="deleteModel">
+        DELETE FROM ai_model WHERE model_id = #{configId}
+    </delete>
 
     <insert id="insertClient" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_client (client_id, client_type, client_role, model_id, model_name, client_name, client_status, client_from)
@@ -55,6 +81,19 @@
         ORDER BY id DESC
     </select>
 
+    <update id="updateClient" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_client SET client_type = #{type}, client_role = #{content}, model_id = #{refId}, model_name = #{secret}, client_name = #{name}, client_status = #{status}, client_from = #{ownerId}
+        WHERE client_id = #{configId}
+    </update>
+
+    <update id="updateClientStatus">
+        UPDATE ai_client SET client_status = #{status} WHERE client_id = #{configId}
+    </update>
+
+    <delete id="deleteClient">
+        DELETE FROM ai_client WHERE client_id = #{configId}
+    </delete>
+
     <insert id="insertPrompt" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_prompt (prompt_id, prompt_name, prompt_type, prompt_content, prompt_status, prompt_from)
         VALUES (#{configId}, #{name}, #{type}, #{content}, #{status}, #{ownerId})
@@ -67,6 +106,19 @@
         FROM ai_prompt
         ORDER BY id DESC
     </select>
+
+    <update id="updatePrompt" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_prompt SET prompt_name = #{name}, prompt_type = #{type}, prompt_content = #{content}, prompt_status = #{status}, prompt_from = #{ownerId}
+        WHERE prompt_id = #{configId}
+    </update>
+
+    <update id="updatePromptStatus">
+        UPDATE ai_prompt SET prompt_status = #{status} WHERE prompt_id = #{configId}
+    </update>
+
+    <delete id="deletePrompt">
+        DELETE FROM ai_prompt WHERE prompt_id = #{configId}
+    </delete>
 
     <insert id="insertAdvisor" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_advisor (advisor_id, advisor_name, advisor_type, advisor_config, advisor_status)
@@ -81,6 +133,19 @@
         ORDER BY id DESC
     </select>
 
+    <update id="updateAdvisor" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_advisor SET advisor_name = #{name}, advisor_type = #{type}, advisor_config = #{content}, advisor_status = #{status}
+        WHERE advisor_id = #{configId}
+    </update>
+
+    <update id="updateAdvisorStatus">
+        UPDATE ai_advisor SET advisor_status = #{status} WHERE advisor_id = #{configId}
+    </update>
+
+    <delete id="deleteAdvisor">
+        DELETE FROM ai_advisor WHERE advisor_id = #{configId}
+    </delete>
+
     <insert id="insertMcp" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_mcp (mcp_id, mcp_name, mcp_type, mcp_config, mcp_secret, mcp_status, mcp_from)
         VALUES (#{configId}, #{name}, #{type}, #{content}, #{secret}, #{status}, #{ownerId})
@@ -94,6 +159,19 @@
         ORDER BY id DESC
     </select>
 
+    <update id="updateMcp" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_mcp SET mcp_name = #{name}, mcp_type = #{type}, mcp_config = #{content}, mcp_secret = #{secret}, mcp_status = #{status}, mcp_from = #{ownerId}
+        WHERE mcp_id = #{configId}
+    </update>
+
+    <update id="updateMcpStatus">
+        UPDATE ai_mcp SET mcp_status = #{status} WHERE mcp_id = #{configId}
+    </update>
+
+    <delete id="deleteMcp">
+        DELETE FROM ai_mcp WHERE mcp_id = #{configId}
+    </delete>
+
     <insert id="insertConfig" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
         INSERT INTO ai_config (config_id, owner_id, owner_type, config_type, ref_id, config_status)
         VALUES (#{configId}, COALESCE(#{content}, CAST(#{ownerId} AS CHAR)), COALESCE(#{ownerType}, #{type}), COALESCE(#{configType}, #{secret}), #{refId}, #{status})
@@ -106,4 +184,17 @@
         FROM ai_config
         ORDER BY id DESC
     </select>
+
+    <update id="updateConfig" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
+        UPDATE ai_config SET owner_id = COALESCE(#{content}, CAST(#{ownerId} AS CHAR)), owner_type = COALESCE(#{ownerType}, #{type}), config_type = COALESCE(#{configType}, #{secret}), ref_id = #{refId}, config_status = #{status}
+        WHERE config_id = #{configId}
+    </update>
+
+    <update id="updateConfigStatus">
+        UPDATE ai_config SET config_status = #{status} WHERE config_id = #{configId}
+    </update>
+
+    <delete id="deleteConfig">
+        DELETE FROM ai_config WHERE config_id = #{configId}
+    </delete>
 </mapper>

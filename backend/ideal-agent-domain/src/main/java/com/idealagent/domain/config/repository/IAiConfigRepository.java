@@ -9,4 +9,10 @@ public interface IAiConfigRepository {
     AiConfigRecord save(ConfigKind kind, AiConfigRecord record);
 
     List<AiConfigRecord> list(ConfigKind kind);
+
+    AiConfigRecord update(ConfigKind kind, AiConfigRecord record);
+
+    void updateStatus(ConfigKind kind, String configId, Integer status);
+
+    void delete(ConfigKind kind, String configId);
 }

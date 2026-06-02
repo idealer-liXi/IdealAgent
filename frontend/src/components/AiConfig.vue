@@ -29,6 +29,7 @@ const templates = {
 
 const selectedKind = ref('api')
 const form = ref(cloneTemplate('api'))
+const editingConfigId = ref('')
 const records = ref([])
 const allRecords = ref(emptyRecordMap())
 const error = ref('')
@@ -38,11 +39,12 @@ const loading = ref(false)
 const selectedKindMeta = computed(() => kinds.find(item => item.key === selectedKind.value) || kinds[0])
 const ownerOptions = computed(() => optionsFor(form.value.ownerType))
 const bindingTargetOptions = computed(() => optionsFor(form.value.configType))
+const isEditing = computed(() => Boolean(editingConfigId.value))
 
 const selectClass = 'w-full rounded-card-md border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-all duration-150 ease-out focus:border-accent focus:bg-elevated focus:ring-2 focus:ring-accent-light'
 
 watch(selectedKind, async kind => {
-  form.value = cloneTemplate(kind)
+  resetForm(kind)
   message.value = ''
   error.value = ''
   await loadRecords()
@@ -76,18 +78,20 @@ async function loadRecords() {
   }
 }
 
-async function createRecord() {
+async function saveRecord() {
   error.value = ''
   message.value = ''
   loading.value = true
   try {
     const body = toPayload(selectedKind.value, form.value)
-    const response = await request.post(`/ai/config/${selectedKind.value}`, body)
+    const response = isEditing.value
+      ? await request.put(`/ai/config/${selectedKind.value}/${editingConfigId.value}`, body)
+      : await request.post(`/ai/config/${selectedKind.value}`, body)
     if (response.data.code !== '0000') {
       error.value = response.data.message || '保存失败'
       return
     }
-    message.value = `已保存 ${response.data.data.configId}`
+    message.value = `${isEditing.value ? '已更新' : '已保存'} ${response.data.data.configId}`
     await refreshAll()
   } catch (e) {
     error.value = e.response?.data?.message || '保存失败'
@@ -96,8 +100,66 @@ async function createRecord() {
   }
 }
 
+async function toggleStatus(record) {
+  error.value = ''
+  message.value = ''
+  const nextStatus = record.status === 1 ? 0 : 1
+  try {
+    await request.patch(`/ai/config/${selectedKind.value}/${record.configId}/status`, { status: nextStatus })
+    message.value = `${record.configId} 已${nextStatus === 1 ? '启用' : '禁用'}`
+    await refreshAll()
+  } catch (e) {
+    error.value = e.response?.data?.message || '状态更新失败'
+  }
+}
+
+async function deleteRecord(record) {
+  if (!window.confirm(`确认删除 ${record.configId}？`)) {
+    return
+  }
+  error.value = ''
+  message.value = ''
+  try {
+    await request.delete(`/ai/config/${selectedKind.value}/${record.configId}`)
+    message.value = `${record.configId} 已删除`
+    if (editingConfigId.value === record.configId) {
+      resetForm(selectedKind.value)
+    }
+    await refreshAll()
+  } catch (e) {
+    error.value = e.response?.data?.message || '删除失败'
+  }
+}
+
+function editRecord(record) {
+  editingConfigId.value = record.configId
+  form.value = fromRecord(selectedKind.value, record)
+  message.value = `正在编辑 ${record.configId}`
+  error.value = ''
+}
+
+function resetForm(kind = selectedKind.value) {
+  editingConfigId.value = ''
+  form.value = cloneTemplate(kind)
+}
+
 function cloneTemplate(kind) {
   return JSON.parse(JSON.stringify(templates[kind]))
+}
+
+function fromRecord(kind, record) {
+  const next = cloneTemplate(kind)
+  next.configId = record.configId || ''
+  next.name = record.name || ''
+  next.type = record.type || ''
+  next.content = record.content || ''
+  next.secret = record.secret || ''
+  next.refId = record.refId || ''
+  next.status = record.status ?? 1
+  next.ownerId = record.ownerId ?? 0
+  next.ownerType = record.ownerType || record.type || next.ownerType
+  next.configType = record.configType || record.secret || next.configType
+  return next
 }
 
 function emptyRecordMap() {
@@ -377,8 +439,11 @@ function toPayload(kind, data) {
                 </label>
 
                 <div class="flex gap-3">
-                  <UiButton variant="primary" :loading="loading" full-width @click="createRecord">
-                    {{ loading ? '保存中...' : '保存配置' }}
+                  <UiButton variant="primary" :loading="loading" full-width @click="saveRecord">
+                    {{ loading ? '保存中...' : (isEditing ? '更新配置' : '保存配置') }}
+                  </UiButton>
+                  <UiButton v-if="isEditing" variant="secondary" @click="resetForm()">
+                    取消编辑
                   </UiButton>
                 </div>
               </div>
@@ -405,6 +470,7 @@ function toPayload(kind, data) {
                       <th class="px-4 py-3 font-medium">类型</th>
                       <th class="px-4 py-3 font-medium">引用</th>
                       <th class="px-4 py-3 font-medium">状态</th>
+                      <th class="px-4 py-3 font-medium">操作</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-border-subtle">
@@ -425,9 +491,18 @@ function toPayload(kind, data) {
                           {{ record.status === 1 ? '启用' : '禁用' }}
                         </span>
                       </td>
+                      <td class="px-4 py-3">
+                        <div class="flex flex-wrap gap-2">
+                          <button class="text-xs font-medium text-accent hover:text-accent-hover" type="button" @click="editRecord(record)">编辑</button>
+                          <button class="text-xs font-medium text-text-secondary hover:text-text-primary" type="button" @click="toggleStatus(record)">
+                            {{ record.status === 1 ? '禁用' : '启用' }}
+                          </button>
+                          <button class="text-xs font-medium text-red-600 hover:text-red-700" type="button" @click="deleteRecord(record)">删除</button>
+                        </div>
+                      </td>
                     </tr>
                     <tr v-if="records.length === 0">
-                      <td class="px-4 py-10 text-center text-text-tertiary" colspan="5">暂无配置</td>
+                      <td class="px-4 py-10 text-center text-text-tertiary" colspan="6">暂无配置</td>
                     </tr>
                   </tbody>
                 </table>

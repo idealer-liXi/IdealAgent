@@ -14,6 +14,13 @@ mybatis:
   mapper-locations: classpath:/mapper/*.xml
 
 ideal-agent:
+  embedding:
+    base-url: ${OPENAI_BASE_URL:}
+    api-key: ${OPENAI_API_KEY:}
+    model: ${EMBEDDING_MODEL:text-embedding-v4}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    encoding-format: float
+    embeddings-path: /v1/embeddings
   jwt:
     issuer: ideal-agent
     secret: ideal-agent-dev-secret-change-me
