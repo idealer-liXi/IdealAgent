@@ -1,7 +1,9 @@
 package com.idealagent.trigger.handler;
 
 import com.idealagent.domain.auth.service.AuthException;
+import com.idealagent.domain.chat.service.ChatException;
 import com.idealagent.domain.config.service.AiConfigException;
+import com.idealagent.domain.rag.service.RagException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,6 +22,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AiConfigException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleAiConfigException(AiConfigException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(ChatException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleChatException(ChatException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(RagException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleRagException(RagException e) {
         return Result.failure(e.getMessage());
     }
 

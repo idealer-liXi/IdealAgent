@@ -18,3 +18,9 @@ ideal-agent:
     issuer: ideal-agent
     secret: ideal-agent-dev-secret-change-me
     expire-hours: 168
+  rag:
+    pgvector:
+      url: jdbc:postgresql://127.0.0.1:5432/ideal_agent
+      username: idealagent
+      password: 123456
+      table-name: public.vector_store_openai

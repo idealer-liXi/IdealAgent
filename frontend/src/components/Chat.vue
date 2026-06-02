@@ -15,13 +15,22 @@ const userName = computed(() => profile.value?.userName || '')
 const clientId = ref('')
 const clients = ref([])
 const clientError = ref('')
+const ragTags = ref([])
+const selectedRagTag = ref('')
+const uploadPanelOpen = ref(false)
+const ragTagInput = ref('')
+const ragFiles = ref([])
+const repoUrl = ref('')
+const ragError = ref('')
+const ragMessage = ref('')
+const ragLoading = ref(false)
 const sessionId = ref('')
 const content = ref('')
 const messages = ref([])
 const sessions = ref([])
 const error = ref('')
 const loading = ref(false)
-const canSend = computed(() => Boolean(clientId.value) && !loading.value)
+const isLocalEchoMode = computed(() => !clientId.value)
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadClients()])
@@ -35,10 +44,92 @@ async function loadClients() {
     const defaultClient = clients.value.find(item => item.clientId === 'client_default_chat') || clients.value[0]
     clientId.value = defaultClient?.clientId || ''
     if (!clientId.value) {
-      clientError.value = '暂无可用 Client，请先去 Config 创建'
+      clientError.value = '暂无可用 Client，将使用本地回声模式'
+      ragTags.value = []
+      selectedRagTag.value = ''
+      uploadPanelOpen.value = false
+    } else {
+      await loadRagTags()
     }
   } catch (e) {
     clientError.value = e.response?.data?.message || 'Client 列表加载失败'
+  }
+}
+
+async function onClientChange() {
+  if (isLocalEchoMode.value) {
+    selectedRagTag.value = ''
+    uploadPanelOpen.value = false
+    ragError.value = ''
+    return
+  }
+  await loadRagTags()
+}
+
+async function loadRagTags() {
+  ragError.value = ''
+  try {
+    const response = await request.get('/rag/tags')
+    ragTags.value = response.data.data || []
+  } catch (e) {
+    ragError.value = e.response?.data?.message || '知识库列表加载失败'
+  }
+}
+
+function onRagFilesChange(event) {
+  ragFiles.value = Array.from(event.target.files || [])
+}
+
+function toggleUploadPanel() {
+  uploadPanelOpen.value = !uploadPanelOpen.value
+}
+
+async function uploadRagFiles() {
+  if (!ragTagInput.value.trim()) {
+    ragError.value = '请输入知识库标签'
+    return
+  }
+  if (ragFiles.value.length === 0) {
+    ragError.value = '请选择文件'
+    return
+  }
+  ragLoading.value = true
+  ragError.value = ''
+  ragMessage.value = ''
+  try {
+    const formData = new FormData()
+    formData.append('ragTag', ragTagInput.value.trim())
+    ragFiles.value.forEach(file => formData.append('fileList', file))
+    await request.post('/rag/file', formData)
+    ragMessage.value = '文件已导入知识库'
+    selectedRagTag.value = ragTagInput.value.trim()
+    await loadRagTags()
+  } catch (e) {
+    ragError.value = e.response?.data?.message || '文件导入失败'
+  } finally {
+    ragLoading.value = false
+  }
+}
+
+async function uploadGitRepo() {
+  if (!repoUrl.value.trim()) {
+    ragError.value = '请输入 Git 仓库地址'
+    return
+  }
+  ragLoading.value = true
+  ragError.value = ''
+  ragMessage.value = ''
+  try {
+    await request.post('/rag/git', {
+      ragTag: ragTagInput.value.trim() || null,
+      repoUrl: repoUrl.value.trim()
+    })
+    ragMessage.value = 'Git 仓库已导入知识库'
+    await loadRagTags()
+  } catch (e) {
+    ragError.value = e.response?.data?.message || 'Git 导入失败'
+  } finally {
+    ragLoading.value = false
   }
 }
 
@@ -69,10 +160,6 @@ async function loadMessages(nextSessionId) {
 }
 
 async function send() {
-  if (!clientId.value) {
-    error.value = '请先选择可用 Client'
-    return
-  }
   if (!content.value.trim()) {
     error.value = '请输入消息内容'
     return
@@ -91,8 +178,9 @@ async function send() {
   try {
     const response = await request.post('/chat/send', {
       sessionId: sessionId.value || null,
-      clientId: clientId.value,
-      content: currentContent
+      clientId: clientId.value || null,
+      content: currentContent,
+      ragTag: isLocalEchoMode.value ? null : selectedRagTag.value || null
     })
     if (response.data.code !== '0000') {
       error.value = response.data.message || '发送失败'
@@ -121,7 +209,7 @@ function newSession() {
     <Sidebar />
     <div class="flex min-w-0 flex-1 flex-col">
       <main class="flex-1 overflow-auto p-5">
-        <section class="grid min-h-full gap-5 lg:grid-cols-[280px_1fr] page-enter">
+        <section class="grid min-h-full gap-5 lg:grid-cols-[380px_minmax(0,1fr)] page-enter">
           <!-- Left Panel -->
           <aside class="flex flex-col gap-5">
             <div class="rounded-card-lg border border-border-default bg-elevated p-5 shadow-card">
@@ -139,15 +227,43 @@ function newSession() {
                 <span class="mb-2 block text-sm font-semibold text-text-secondary">Client</span>
                 <select
                   v-model="clientId"
+                  @change="onClientChange"
                   class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
-                  :disabled="clients.length === 0"
                 >
+                  <option value="">本地回声模式</option>
                   <option v-for="client in clients" :key="client.clientId" :value="client.clientId">
                     {{ clientLabel(client) }}
                   </option>
                 </select>
               </label>
               <p v-if="clientError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ clientError }}</p>
+
+              <div v-if="!isLocalEchoMode" class="mt-5 rounded-card border border-border-subtle bg-surface p-3">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm font-semibold text-text-secondary">RAG 知识库</span>
+                  <button class="text-xs font-medium text-accent" type="button" @click="loadRagTags">刷新</button>
+                </div>
+                <select v-model="selectedRagTag" class="mt-2 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent">
+                  <option value="">不使用知识库</option>
+                  <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
+                </select>
+
+                <UiButton variant="secondary" size="sm" full-width class="mt-3" @click="toggleUploadPanel">
+                  {{ uploadPanelOpen ? '收起上传知识库' : '上传知识库' }}
+                </UiButton>
+
+                <div v-if="uploadPanelOpen" class="mt-3">
+                  <input v-model="ragTagInput" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="知识库标签" />
+                  <input class="mt-3 block w-full text-xs text-text-secondary" type="file" multiple accept=".txt,.md,.java,.html" @change="onRagFilesChange" />
+                  <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadRagFiles">上传文件</UiButton>
+
+                  <input v-model="repoUrl" class="mt-3 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Git repo URL" />
+                  <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadGitRepo">导入 Git</UiButton>
+                </div>
+
+                <p v-if="ragMessage" class="mt-3 rounded-card bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{{ ragMessage }}</p>
+                <p v-if="ragError" class="mt-3 rounded-card bg-red-50 px-3 py-2 text-xs text-red-700">{{ ragError }}</p>
+              </div>
 
               <UiButton variant="primary" full-width class="mt-4" @click="newSession">
                 新会话
