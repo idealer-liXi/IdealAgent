@@ -1,11 +1,12 @@
 package com.idealagent.trigger.controller;
 
-import com.idealagent.domain.chat.model.dto.ChatRequestDTO;
-import com.idealagent.domain.chat.model.vo.ChatClientOptionVO;
-import com.idealagent.domain.chat.model.vo.ChatMessageVO;
-import com.idealagent.domain.chat.model.vo.ChatResponseVO;
-import com.idealagent.domain.chat.model.vo.ChatSessionVO;
-import com.idealagent.domain.chat.service.ChatService;
+import com.idealagent.api.IChatApi;
+import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
+import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
+import com.idealagent.domain.session.model.vo.ChatMessageVO;
+import com.idealagent.domain.ai.model.vo.ChatResponseVO;
+import com.idealagent.domain.session.model.vo.ChatSessionVO;
+import com.idealagent.domain.ai.service.chat.ChatService;
 import com.idealagent.trigger.context.UserContext;
 import com.idealagent.types.result.Result;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,7 +23,7 @@ import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/chat")
-public class ChatController {
+public class ChatController implements IChatApi {
     private final ChatService chatService;
 
     public ChatController(ChatService chatService) {
@@ -30,26 +31,31 @@ public class ChatController {
     }
 
     @PostMapping("/send")
+    @Override
     public Result<ChatResponseVO> send(@RequestBody ChatRequestDTO request) {
         return Result.success(chatService.send(UserContext.userId(), request));
     }
 
     @GetMapping("/sessions")
+    @Override
     public Result<List<ChatSessionVO>> sessions() {
         return Result.success(chatService.listSessions(UserContext.userId()));
     }
 
     @GetMapping("/messages/{sessionId}")
+    @Override
     public Result<List<ChatMessageVO>> messages(@PathVariable String sessionId) {
         return Result.success(chatService.listMessages(UserContext.userId(), sessionId));
     }
 
     @GetMapping("/clients")
+    @Override
     public Result<List<ChatClientOptionVO>> clients() {
         return Result.success(chatService.listClients());
     }
 
     @PostMapping("/stream")
+    @Override
     public SseEmitter stream(@RequestBody ChatRequestDTO request) {
         SseEmitter emitter = new SseEmitter(60_000L);
         Long userId = UserContext.userId();

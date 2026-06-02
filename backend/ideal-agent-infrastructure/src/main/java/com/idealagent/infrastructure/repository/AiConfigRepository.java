@@ -1,8 +1,8 @@
 package com.idealagent.infrastructure.repository;
 
-import com.idealagent.domain.config.model.entity.AiConfigRecord;
-import com.idealagent.domain.config.repository.IAiConfigRepository;
-import com.idealagent.domain.config.service.ConfigKind;
+import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.repository.IAiConfigRepository;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
 import com.idealagent.infrastructure.persistent.dao.IAiConfigDao;
 import com.idealagent.infrastructure.persistent.po.AiConfigData;
 import org.springframework.stereotype.Repository;

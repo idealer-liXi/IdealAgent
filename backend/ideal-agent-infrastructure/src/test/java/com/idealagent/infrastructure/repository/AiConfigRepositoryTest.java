@@ -1,7 +1,7 @@
 package com.idealagent.infrastructure.repository;
 
-import com.idealagent.domain.config.model.entity.AiConfigRecord;
-import com.idealagent.domain.config.service.ConfigKind;
+import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
 import com.idealagent.infrastructure.persistent.dao.IAiConfigDao;
 import com.idealagent.infrastructure.persistent.po.AiConfigData;
 import org.junit.jupiter.api.BeforeEach;

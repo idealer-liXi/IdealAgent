@@ -1,7 +1,7 @@
 package com.idealagent.trigger.interceptor;
 
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
-import com.idealagent.domain.auth.service.ITokenParser;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
+import com.idealagent.domain.user.service.auth.ITokenParser;
 import com.idealagent.trigger.context.UserContext;
 import com.idealagent.types.result.Result;
 import com.fasterxml.jackson.databind.ObjectMapper;

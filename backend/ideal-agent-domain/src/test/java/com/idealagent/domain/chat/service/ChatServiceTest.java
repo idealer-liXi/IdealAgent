@@ -1,19 +1,19 @@
-package com.idealagent.domain.chat.service;
+package com.idealagent.domain.ai.service.chat;
 
-import com.idealagent.domain.chat.model.dto.ChatRequestDTO;
-import com.idealagent.domain.chat.model.entity.ChatMessage;
-import com.idealagent.domain.chat.model.entity.ChatSession;
-import com.idealagent.domain.chat.model.vo.ChatClientOptionVO;
-import com.idealagent.domain.chat.model.vo.ChatResponseVO;
-import com.idealagent.domain.chat.repository.IChatRepository;
-import com.idealagent.domain.config.model.entity.AiConfigRecord;
-import com.idealagent.domain.config.repository.IAiConfigRepository;
-import com.idealagent.domain.config.service.ConfigKind;
-import com.idealagent.domain.rag.model.entity.RagChunk;
-import com.idealagent.domain.rag.repository.IRagRepository;
-import com.idealagent.domain.rag.service.DeterministicEmbeddingService;
-import com.idealagent.domain.rag.service.RagService;
-import com.idealagent.domain.rag.service.SimpleTextSplitter;
+import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
+import com.idealagent.domain.session.model.entity.ChatMessage;
+import com.idealagent.domain.session.model.entity.ChatSession;
+import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
+import com.idealagent.domain.ai.model.vo.ChatResponseVO;
+import com.idealagent.domain.session.repository.ISessionRepository;
+import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.repository.IAiConfigRepository;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
+import com.idealagent.domain.ai.model.entity.RagChunk;
+import com.idealagent.domain.ai.repository.IRagRepository;
+import com.idealagent.domain.ai.service.rag.DeterministicEmbeddingService;
+import com.idealagent.domain.ai.service.rag.RagService;
+import com.idealagent.domain.ai.service.rag.SimpleTextSplitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -125,7 +125,7 @@ class ChatServiceTest {
         return record;
     }
 
-    private static class FakeChatRepository implements IChatRepository {
+    private static class FakeChatRepository implements ISessionRepository {
         private final List<ChatSession> sessions = new ArrayList<>();
         private final List<ChatMessage> messages = new ArrayList<>();
 

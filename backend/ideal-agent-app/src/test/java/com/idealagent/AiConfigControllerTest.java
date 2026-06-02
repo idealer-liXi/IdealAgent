@@ -1,12 +1,12 @@
 package com.idealagent;
 
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
-import com.idealagent.domain.auth.service.ITokenParser;
-import com.idealagent.domain.config.model.dto.AiConfigRecordDTO;
-import com.idealagent.domain.config.model.vo.AiConfigRecordVO;
-import com.idealagent.domain.config.service.AiConfigService;
-import com.idealagent.domain.config.service.ConfigKind;
-import com.idealagent.trigger.config.WebMvcConfig;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
+import com.idealagent.domain.user.service.auth.ITokenParser;
+import com.idealagent.domain.ai.model.dto.AiConfigRecordDTO;
+import com.idealagent.domain.ai.model.vo.AiConfigRecordVO;
+import com.idealagent.domain.ai.service.config.AiConfigService;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
+import com.idealagent.config.WebMvcConfig;
 import com.idealagent.trigger.controller.AiConfigController;
 import com.idealagent.trigger.interceptor.AuthInterceptor;
 import org.junit.jupiter.api.Test;

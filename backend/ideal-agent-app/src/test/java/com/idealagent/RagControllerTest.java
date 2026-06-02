@@ -1,12 +1,12 @@
 package com.idealagent;
 
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
-import com.idealagent.domain.auth.service.ITokenParser;
-import com.idealagent.domain.rag.model.dto.RagUploadDTO;
-import com.idealagent.domain.rag.model.entity.RagFile;
-import com.idealagent.domain.rag.model.vo.RagTagVO;
-import com.idealagent.domain.rag.service.RagService;
-import com.idealagent.trigger.config.WebMvcConfig;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
+import com.idealagent.domain.user.service.auth.ITokenParser;
+import com.idealagent.domain.ai.model.dto.RagUploadDTO;
+import com.idealagent.domain.ai.model.entity.RagFile;
+import com.idealagent.domain.ai.model.vo.RagTagVO;
+import com.idealagent.domain.ai.service.rag.RagService;
+import com.idealagent.config.WebMvcConfig;
 import com.idealagent.trigger.controller.RagController;
 import com.idealagent.trigger.interceptor.AuthInterceptor;
 import org.junit.jupiter.api.Test;

@@ -1,28 +1,19 @@
 package com.idealagent.infrastructure.rag;
 
-import com.idealagent.domain.rag.model.entity.RagChunk;
-import com.idealagent.domain.rag.repository.IRagRepository;
-import com.idealagent.domain.rag.service.RagException;
-import org.springframework.beans.factory.annotation.Value;
+import com.idealagent.domain.ai.model.entity.RagChunk;
+import com.idealagent.domain.ai.repository.IRagRepository;
+import com.idealagent.domain.ai.service.rag.RagException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.stereotype.Repository;
 
-import javax.sql.DataSource;
 import java.util.List;
 
-@Repository
 public class PgVectorRagRepository implements IRagRepository {
     private final JdbcTemplate jdbcTemplate;
     private final String tableName;
 
-    public PgVectorRagRepository(
-            @Value("${ideal-agent.rag.pgvector.url:jdbc:postgresql://127.0.0.1:15432/vector_store}") String url,
-            @Value("${ideal-agent.rag.pgvector.username:postgres}") String username,
-            @Value("${ideal-agent.rag.pgvector.password:postgres}") String password,
-            @Value("${ideal-agent.rag.pgvector.table-name:public.vector_store_openai}") String tableName) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource(url, username, password));
+    public PgVectorRagRepository(JdbcTemplate jdbcTemplate, String tableName) {
+        this.jdbcTemplate = jdbcTemplate;
         this.tableName = tableName;
     }
 
@@ -64,15 +55,6 @@ public class PgVectorRagRepository implements IRagRepository {
 
     private RagException unavailable(DataAccessException e) {
         return new RagException("知识库服务不可用，请检查 pgvector 配置", e);
-    }
-
-    private DataSource dataSource(String url, String username, String password) {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setDriverClassName("org.postgresql.Driver");
-        dataSource.setUrl(url);
-        dataSource.setUsername(username);
-        dataSource.setPassword(password);
-        return dataSource;
     }
 
     private String metadata(Long userId, String ragTag, String source) {

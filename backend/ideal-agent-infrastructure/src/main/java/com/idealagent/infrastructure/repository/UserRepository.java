@@ -1,7 +1,7 @@
 package com.idealagent.infrastructure.repository;
 
-import com.idealagent.domain.auth.model.entity.UserAccount;
-import com.idealagent.domain.auth.repository.IUserRepository;
+import com.idealagent.domain.user.model.entity.UserAccount;
+import com.idealagent.domain.user.repository.IUserRepository;
 import com.idealagent.infrastructure.persistent.dao.IAiUserDao;
 import com.idealagent.infrastructure.persistent.po.AiUser;
 import org.springframework.stereotype.Repository;

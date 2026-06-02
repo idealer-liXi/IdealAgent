@@ -4,11 +4,31 @@ server:
     context-path: /idealagent/api/v1
 
 spring:
-  datasource:
+  main:
+    banner-mode: off
+    log-startup-info: false
+
+datasource:
+  hikari:
+    minimum-idle: 15
+    maximum-pool-size: 25
+    idle-timeout: 180000
+    max-lifetime: 1800000
+    connection-timeout: 30000
+    connection-test-query: SELECT 1
+    initialization-fail-timeout: 1
+  mysql:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:13306/ideal_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
     password: 123456
+    jdbc-url: jdbc:mysql://127.0.0.1:13306/ideal_agent?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    pool-name: MYSQL_HIKARI
+  postgresql:
+    username: idealagent
+    password: 123456
+    driver-class-name: org.postgresql.Driver
+    jdbc-url: jdbc:postgresql://127.0.0.1:5432/ideal_agent
+    pool-name: POSTGRESQL_HIKARI
 
 mybatis:
   mapper-locations: classpath:/mapper/*.xml
@@ -21,13 +41,9 @@ ideal-agent:
     dimensions: ${EMBEDDING_DIMENSIONS:1024}
     encoding-format: float
     embeddings-path: /v1/embeddings
+    schema-name: public
+    table-name: vector_store_openai
   jwt:
     issuer: ideal-agent
     secret: ideal-agent-dev-secret-change-me
     expire-hours: 168
-  rag:
-    pgvector:
-      url: jdbc:postgresql://127.0.0.1:5432/ideal_agent
-      username: idealagent
-      password: 123456
-      table-name: public.vector_store_openai

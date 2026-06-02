@@ -1,7 +1,7 @@
 package com.idealagent.infrastructure.repository;
 
-import com.idealagent.domain.chat.model.entity.ChatMessage;
-import com.idealagent.domain.chat.model.entity.ChatSession;
+import com.idealagent.domain.session.model.entity.ChatMessage;
+import com.idealagent.domain.session.model.entity.ChatSession;
 import com.idealagent.infrastructure.persistent.dao.IAiMessageDao;
 import com.idealagent.infrastructure.persistent.dao.IAiSessionDao;
 import com.idealagent.infrastructure.persistent.po.AiMessage;

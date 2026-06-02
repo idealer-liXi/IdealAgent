@@ -1,10 +1,11 @@
 package com.idealagent.trigger.controller;
 
-import com.idealagent.domain.rag.model.dto.RagUploadDTO;
-import com.idealagent.domain.rag.model.entity.RagFile;
-import com.idealagent.domain.rag.model.vo.RagTagVO;
-import com.idealagent.domain.rag.service.RagException;
-import com.idealagent.domain.rag.service.RagService;
+import com.idealagent.api.IRagApi;
+import com.idealagent.domain.ai.model.dto.RagUploadDTO;
+import com.idealagent.domain.ai.model.entity.RagFile;
+import com.idealagent.domain.ai.model.vo.RagTagVO;
+import com.idealagent.domain.ai.service.rag.RagException;
+import com.idealagent.domain.ai.service.rag.RagService;
 import com.idealagent.trigger.context.UserContext;
 import com.idealagent.types.result.Result;
 import org.springframework.http.MediaType;
@@ -23,7 +24,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/rag")
-public class RagController {
+public class RagController implements IRagApi {
     private final RagService ragService;
 
     public RagController(RagService ragService) {
@@ -31,17 +32,20 @@ public class RagController {
     }
 
     @GetMapping("/tags")
+    @Override
     public Result<List<RagTagVO>> tags() {
         return Result.success(ragService.listTags(UserContext.userId()));
     }
 
     @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Override
     public Result<Void> uploadFile(@RequestPart("ragTag") String ragTag, @RequestPart("fileList") List<MultipartFile> fileList) {
         ragService.uploadFiles(UserContext.userId(), ragTag, toRagFiles(fileList));
         return Result.success(null);
     }
 
     @PostMapping("/git")
+    @Override
     public Result<Void> uploadGit(@RequestBody RagUploadDTO request) {
         ragService.uploadGitRepo(UserContext.userId(), request);
         return Result.success(null);

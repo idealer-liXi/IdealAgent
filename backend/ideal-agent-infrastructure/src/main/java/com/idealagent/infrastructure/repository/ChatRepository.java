@@ -1,8 +1,8 @@
 package com.idealagent.infrastructure.repository;
 
-import com.idealagent.domain.chat.model.entity.ChatMessage;
-import com.idealagent.domain.chat.model.entity.ChatSession;
-import com.idealagent.domain.chat.repository.IChatRepository;
+import com.idealagent.domain.session.model.entity.ChatMessage;
+import com.idealagent.domain.session.model.entity.ChatSession;
+import com.idealagent.domain.session.repository.ISessionRepository;
 import com.idealagent.infrastructure.persistent.dao.IAiMessageDao;
 import com.idealagent.infrastructure.persistent.dao.IAiSessionDao;
 import com.idealagent.infrastructure.persistent.po.AiMessage;
@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public class ChatRepository implements IChatRepository {
+public class ChatRepository implements ISessionRepository {
     private final IAiSessionDao sessionDao;
     private final IAiMessageDao messageDao;
 

@@ -13,5 +13,14 @@
             <artifactId>ideal-agent-types</artifactId>
             <version>1.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.idealagent</groupId>
+            <artifactId>ideal-agent-domain</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+        </dependency>
     </dependencies>
 </project>

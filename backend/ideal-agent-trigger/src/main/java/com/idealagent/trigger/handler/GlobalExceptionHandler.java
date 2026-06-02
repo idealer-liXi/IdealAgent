@@ -1,9 +1,9 @@
 package com.idealagent.trigger.handler;
 
-import com.idealagent.domain.auth.service.AuthException;
-import com.idealagent.domain.chat.service.ChatException;
-import com.idealagent.domain.config.service.AiConfigException;
-import com.idealagent.domain.rag.service.RagException;
+import com.idealagent.domain.user.service.auth.AuthException;
+import com.idealagent.domain.ai.service.chat.ChatException;
+import com.idealagent.domain.ai.service.config.AiConfigException;
+import com.idealagent.domain.ai.service.rag.RagException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;

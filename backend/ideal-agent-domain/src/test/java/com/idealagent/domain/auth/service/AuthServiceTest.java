@@ -1,11 +1,11 @@
-package com.idealagent.domain.auth.service;
+package com.idealagent.domain.user.service.auth;
 
-import com.idealagent.domain.auth.model.dto.LoginDTO;
-import com.idealagent.domain.auth.model.dto.RegisterDTO;
-import com.idealagent.domain.auth.model.entity.UserAccount;
-import com.idealagent.domain.auth.model.vo.AuthTokenVO;
-import com.idealagent.domain.auth.model.vo.UserProfileVO;
-import com.idealagent.domain.auth.repository.IUserRepository;
+import com.idealagent.domain.user.model.dto.LoginDTO;
+import com.idealagent.domain.user.model.dto.RegisterDTO;
+import com.idealagent.domain.user.model.entity.UserAccount;
+import com.idealagent.domain.user.model.vo.AuthTokenVO;
+import com.idealagent.domain.user.model.vo.UserProfileVO;
+import com.idealagent.domain.user.repository.IUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

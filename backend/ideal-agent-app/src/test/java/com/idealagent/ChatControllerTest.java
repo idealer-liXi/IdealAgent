@@ -1,14 +1,14 @@
 package com.idealagent;
 
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
-import com.idealagent.domain.auth.service.ITokenParser;
-import com.idealagent.domain.chat.model.dto.ChatRequestDTO;
-import com.idealagent.domain.chat.model.vo.ChatClientOptionVO;
-import com.idealagent.domain.chat.model.vo.ChatMessageVO;
-import com.idealagent.domain.chat.model.vo.ChatResponseVO;
-import com.idealagent.domain.chat.model.vo.ChatSessionVO;
-import com.idealagent.domain.chat.service.ChatService;
-import com.idealagent.trigger.config.WebMvcConfig;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
+import com.idealagent.domain.user.service.auth.ITokenParser;
+import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
+import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
+import com.idealagent.domain.session.model.vo.ChatMessageVO;
+import com.idealagent.domain.ai.model.vo.ChatResponseVO;
+import com.idealagent.domain.session.model.vo.ChatSessionVO;
+import com.idealagent.domain.ai.service.chat.ChatService;
+import com.idealagent.config.WebMvcConfig;
 import com.idealagent.trigger.controller.ChatController;
 import com.idealagent.trigger.interceptor.AuthInterceptor;
 import org.junit.jupiter.api.Test;

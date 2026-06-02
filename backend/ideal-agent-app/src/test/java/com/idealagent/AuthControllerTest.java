@@ -1,13 +1,13 @@
 package com.idealagent;
 
-import com.idealagent.domain.auth.model.dto.LoginDTO;
-import com.idealagent.domain.auth.model.dto.RegisterDTO;
-import com.idealagent.domain.auth.model.vo.AuthTokenVO;
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
-import com.idealagent.domain.auth.model.vo.UserProfileVO;
-import com.idealagent.domain.auth.service.AuthService;
-import com.idealagent.domain.auth.service.ITokenParser;
-import com.idealagent.trigger.config.WebMvcConfig;
+import com.idealagent.domain.user.model.dto.LoginDTO;
+import com.idealagent.domain.user.model.dto.RegisterDTO;
+import com.idealagent.domain.user.model.vo.AuthTokenVO;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
+import com.idealagent.domain.user.model.vo.UserProfileVO;
+import com.idealagent.domain.user.service.auth.AuthService;
+import com.idealagent.domain.user.service.auth.ITokenParser;
+import com.idealagent.config.WebMvcConfig;
 import com.idealagent.trigger.controller.AuthController;
 import com.idealagent.trigger.controller.UserController;
 import com.idealagent.trigger.interceptor.AuthInterceptor;

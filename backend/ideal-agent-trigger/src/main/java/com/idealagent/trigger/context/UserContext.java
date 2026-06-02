@@ -1,6 +1,6 @@
 package com.idealagent.trigger.context;
 
-import com.idealagent.domain.auth.model.vo.AuthUserVO;
+import com.idealagent.domain.user.model.vo.AuthUserVO;
 
 public final class UserContext {
     private static final ThreadLocal<AuthUserVO> CURRENT = new ThreadLocal<>();

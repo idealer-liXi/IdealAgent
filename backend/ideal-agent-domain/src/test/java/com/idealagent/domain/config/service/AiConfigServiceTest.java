@@ -1,9 +1,10 @@
-package com.idealagent.domain.config.service;
+package com.idealagent.domain.ai.service.config;
 
-import com.idealagent.domain.config.model.dto.AiConfigRecordDTO;
-import com.idealagent.domain.config.model.entity.AiConfigRecord;
-import com.idealagent.domain.config.model.vo.AiConfigRecordVO;
-import com.idealagent.domain.config.repository.IAiConfigRepository;
+import com.idealagent.domain.ai.model.dto.AiConfigRecordDTO;
+import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
+import com.idealagent.domain.ai.model.vo.AiConfigRecordVO;
+import com.idealagent.domain.ai.repository.IAiConfigRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

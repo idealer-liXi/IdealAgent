@@ -1,10 +1,10 @@
-package com.idealagent.domain.rag.service;
+package com.idealagent.domain.ai.service.rag;
 
-import com.idealagent.domain.rag.model.dto.RagUploadDTO;
-import com.idealagent.domain.rag.model.entity.RagChunk;
-import com.idealagent.domain.rag.model.entity.RagFile;
-import com.idealagent.domain.rag.model.vo.RagTagVO;
-import com.idealagent.domain.rag.repository.IRagRepository;
+import com.idealagent.domain.ai.model.dto.RagUploadDTO;
+import com.idealagent.domain.ai.model.entity.RagChunk;
+import com.idealagent.domain.ai.model.entity.RagFile;
+import com.idealagent.domain.ai.model.vo.RagTagVO;
+import com.idealagent.domain.ai.repository.IRagRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
