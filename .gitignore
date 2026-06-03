@@ -38,5 +38,6 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Docker/local runtime data
+backend/ideal-agent-app/src/main/resources/application-local.yml
 backend/docs/docker/.env
 backend/docs/docker/data/

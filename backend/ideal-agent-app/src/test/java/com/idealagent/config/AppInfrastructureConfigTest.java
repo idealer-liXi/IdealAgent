@@ -16,9 +16,12 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import javax.sql.DataSource;
+import java.util.Properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,6 +106,19 @@ class AppInfrastructureConfigTest {
     }
 
     @Test
+    void applicationDevDisablesUnusedOpenAiAutoConfiguration() {
+        Properties properties = loadYamlProperties("application-dev.yml");
+
+        assertThat(properties)
+                .containsEntry("spring.ai.model.chat", "none")
+                .containsEntry("spring.ai.model.embedding", "none")
+                .containsEntry("spring.ai.model.audio.speech", "none")
+                .containsEntry("spring.ai.model.audio.transcription", "none")
+                .containsEntry("spring.ai.model.image", "none")
+                .containsEntry("spring.ai.model.moderation", "none");
+    }
+
+    @Test
     void pgVectorStoreConfigCreatesOnlyTokenTextSplitterWithoutPostgresqlTemplate() {
         new ApplicationContextRunner()
                 .withUserConfiguration(PgVectorStoreConfig.class)
@@ -168,5 +184,11 @@ class AppInfrastructureConfigTest {
     @Configuration
     @EnableConfigurationProperties(EmbeddingProperties.class)
     static class EmbeddingPropertiesConfig {
+    }
+
+    private Properties loadYamlProperties(String resourceName) {
+        YamlPropertiesFactoryBean factory = new YamlPropertiesFactoryBean();
+        factory.setResources(new ClassPathResource(resourceName));
+        return factory.getObject();
     }
 }
