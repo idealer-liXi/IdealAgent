@@ -7,6 +7,8 @@ import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
 import com.idealagent.domain.ai.model.vo.ChatResponseVO;
 import com.idealagent.domain.ai.repository.IAiConfigRepository;
 import com.idealagent.domain.ai.service.augment.IAugmentService;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.augment.McpToolHandle;
 import com.idealagent.domain.ai.service.dispatch.IChatDispatchService;
 import com.idealagent.domain.session.model.entity.ChatMessage;
 import com.idealagent.domain.session.model.entity.ChatSession;
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallbackProvider;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +35,7 @@ class ChatServiceTest {
     private FakeAiConfigRepository configRepository;
     private RecordingDispatchService dispatchService;
     private RecordingAugmentService augmentService;
+    private RecordingMcpToolService mcpToolService;
     private RecordingChatGateway chatGateway;
     private ChatService chatService;
 
@@ -40,8 +45,9 @@ class ChatServiceTest {
         configRepository = new FakeAiConfigRepository();
         dispatchService = new RecordingDispatchService();
         augmentService = new RecordingAugmentService();
+        mcpToolService = new RecordingMcpToolService();
         chatGateway = new RecordingChatGateway();
-        chatService = new ChatService(repository, configRepository, dispatchService, augmentService, chatGateway);
+        chatService = new ChatService(repository, configRepository, dispatchService, augmentService, mcpToolService, chatGateway);
     }
 
     @Test
@@ -56,6 +62,10 @@ class ChatServiceTest {
         assertThat(dispatchService.lastClientId).isEqualTo("client_default_chat");
         assertThat(augmentService.lastUserId).isEqualTo(7L);
         assertThat(augmentService.lastUserMessage).isEqualTo("你好");
+        assertThat(mcpToolService.lastUserId).isEqualTo(7L);
+        assertThat(mcpToolService.lastClientId).isEqualTo("client_default_chat");
+        assertThat(chatGateway.lastToolProvider).isSameAs(mcpToolService.handle.toolCallbackProvider());
+        assertThat(mcpToolService.handle.closed).isTrue();
         assertThat(chatGateway.lastMessages).extracting(Message::getText).containsExactly("你好");
         assertThat(repository.messages).extracting(ChatMessage::getRole).containsExactly("user", "assistant");
     }
@@ -201,10 +211,38 @@ class ChatServiceTest {
         }
     }
 
+    private static class RecordingMcpToolService implements IMcpToolService {
+        private Long lastUserId;
+        private String lastClientId;
+        private final RecordingMcpToolHandle handle = new RecordingMcpToolHandle();
+
+        @Override
+        public McpToolHandle augmentMcpTool(Long userId, String clientId) {
+            lastUserId = userId;
+            lastClientId = clientId;
+            return handle;
+        }
+    }
+
+    private static class RecordingMcpToolHandle extends McpToolHandle {
+        private boolean closed;
+
+        RecordingMcpToolHandle() {
+            super(new SyncMcpToolCallbackProvider(), List.of());
+        }
+
+        @Override
+        public void close() {
+            closed = true;
+            super.close();
+        }
+    }
+
     private static class RecordingChatGateway extends SpringAiChatGateway {
         private String completeResponse = "模型回复";
         private List<String> streamDeltas = List.of();
         private List<Message> lastMessages = List.of();
+        private ToolCallbackProvider lastToolProvider;
 
         @Override
         public String complete(ChatClient chatClient, List<Message> messages) {
@@ -213,8 +251,22 @@ class ChatServiceTest {
         }
 
         @Override
+        public String complete(ChatClient chatClient, List<Message> messages, ToolCallbackProvider toolCallbackProvider) {
+            lastMessages = List.copyOf(messages);
+            lastToolProvider = toolCallbackProvider;
+            return completeResponse;
+        }
+
+        @Override
         public void stream(ChatClient chatClient, List<Message> messages, Consumer<String> onDelta) {
             lastMessages = List.copyOf(messages);
+            streamDeltas.forEach(onDelta);
+        }
+
+        @Override
+        public void stream(ChatClient chatClient, List<Message> messages, ToolCallbackProvider toolCallbackProvider, Consumer<String> onDelta) {
+            lastMessages = List.copyOf(messages);
+            lastToolProvider = toolCallbackProvider;
             streamDeltas.forEach(onDelta);
         }
     }

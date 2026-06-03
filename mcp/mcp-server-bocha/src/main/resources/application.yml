@@ -1,0 +1,29 @@
+server:
+  port: 9005
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+      enabled: true
+
+spring:
+  application:
+    name: mcp-server-bocha
+  ai:
+    mcp:
+      server:
+        name: mcp-server-bocha
+        version: 1.0.0
+
+logging:
+  level:
+    root: info
+    org.springframework.ai.mcp: debug
+    io.modelcontextprotocol: debug
+  config: classpath:logback-spring.xml
+
+ideal-agent:
+  mcp:
+    header:
+      secret: X-IdealAgent-Mcp-Secret
+      user-id: X-IdealAgent-Mcp-UserId

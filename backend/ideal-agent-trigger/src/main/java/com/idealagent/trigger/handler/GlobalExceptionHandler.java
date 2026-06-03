@@ -3,6 +3,7 @@ package com.idealagent.trigger.handler;
 import com.idealagent.domain.user.service.auth.AuthException;
 import com.idealagent.domain.ai.service.chat.ChatException;
 import com.idealagent.domain.ai.service.config.AiConfigException;
+import com.idealagent.domain.ai.service.mcp.McpException;
 import com.idealagent.domain.ai.service.rag.RagException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RagException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleRagException(RagException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(McpException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleMcpException(McpException e) {
         return Result.failure(e.getMessage());
     }
 

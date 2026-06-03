@@ -52,6 +52,10 @@ ideal-agent:
     embeddings-path: /v1/embeddings
     schema-name: public
     table-name: vector_store_openai
+  mcp:
+    header:
+      secret: X-IdealAgent-Mcp-Secret
+      user-id: X-IdealAgent-Mcp-UserId
   jwt:
     issuer: ideal-agent
     secret: ideal-agent-dev-secret-change-me

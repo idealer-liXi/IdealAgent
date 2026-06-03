@@ -2,6 +2,8 @@ package com.idealagent.domain.ai.service.chat;
 
 import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
 import com.idealagent.domain.ai.service.augment.IAugmentService;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.augment.McpToolHandle;
 import com.idealagent.domain.ai.service.dispatch.IChatDispatchService;
 import com.idealagent.domain.session.model.entity.ChatMessage;
 import com.idealagent.domain.session.model.entity.ChatSession;
@@ -36,17 +38,20 @@ public class ChatService {
     private final IAiConfigRepository aiConfigRepository;
     private final IChatDispatchService chatDispatchService;
     private final IAugmentService augmentService;
+    private final IMcpToolService mcpToolService;
     private final SpringAiChatGateway chatGateway;
 
     public ChatService(ISessionRepository chatRepository,
                        IAiConfigRepository aiConfigRepository,
                        IChatDispatchService chatDispatchService,
                        IAugmentService augmentService,
+                       IMcpToolService mcpToolService,
                        SpringAiChatGateway chatGateway) {
         this.chatRepository = chatRepository;
         this.aiConfigRepository = aiConfigRepository;
         this.chatDispatchService = chatDispatchService;
         this.augmentService = augmentService;
+        this.mcpToolService = mcpToolService;
         this.chatGateway = chatGateway;
     }
 
@@ -61,10 +66,11 @@ public class ChatService {
 
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
         List<Message> messages = augmentService.augmentRagMessage(userId, request.content(), request.ragTag());
-        String assistantContent = chatGateway.complete(runtimeClient, messages);
-        ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent));
-
-        return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
+        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
+            String assistantContent = chatGateway.complete(runtimeClient, messages, mcpTools.toolCallbackProvider());
+            ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent));
+            return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
+        }
     }
 
     public ChatResponseVO stream(Long userId, ChatRequestDTO request, Consumer<String> onDelta) {
@@ -79,10 +85,12 @@ public class ChatService {
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
         List<Message> messages = augmentService.augmentRagMessage(userId, request.content(), request.ragTag());
         StringBuilder assistantContent = new StringBuilder();
-        chatGateway.stream(runtimeClient, messages, delta -> {
-            assistantContent.append(delta);
-            onDelta.accept(delta);
-        });
+        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
+            chatGateway.stream(runtimeClient, messages, mcpTools.toolCallbackProvider(), delta -> {
+                assistantContent.append(delta);
+                onDelta.accept(delta);
+            });
+        }
         ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent.toString()));
 
         return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
