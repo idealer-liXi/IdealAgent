@@ -55,7 +55,7 @@ onMounted(async () => {
 async function loadClients() {
   clientError.value = ''
   try {
-    const response = await request.get('/chat/clients')
+    const response = await request.get('/ai/chat/clients')
     clients.value = response.data.data || []
     const defaultClient = clients.value.find(item => item.clientId === 'client_default_chat') || clients.value[0]
     clientId.value = defaultClient?.clientId || ''
@@ -85,7 +85,7 @@ async function onClientChange() {
 async function loadRagTags() {
   ragError.value = ''
   try {
-    const response = await request.get('/rag/tags')
+    const response = await request.get('/ai/rag/tags')
     ragTags.value = response.data.data || []
   } catch (e) {
     ragError.value = e.response?.data?.message || '知识库列表加载失败'
@@ -116,7 +116,7 @@ async function uploadRagFiles() {
     const formData = new FormData()
     formData.append('ragTag', ragTagInput.value.trim())
     ragFiles.value.forEach(file => formData.append('fileList', file))
-    await request.post('/rag/file', formData)
+    await request.post('/ai/rag/file', formData)
     ragMessage.value = '文件已导入知识库'
     selectedRagTag.value = ragTagInput.value.trim()
     await loadRagTags()
@@ -136,7 +136,7 @@ async function uploadGitRepo() {
   ragError.value = ''
   ragMessage.value = ''
   try {
-    await request.post('/rag/git', {
+    await request.post('/ai/rag/git', {
       ragTag: ragTagInput.value.trim() || null,
       repoUrl: repoUrl.value.trim()
     })
@@ -157,7 +157,7 @@ function clientLabel(client) {
 
 async function loadSessions() {
   try {
-    const response = await request.get('/chat/sessions')
+    const response = await request.get('/ai/chat/sessions')
     sessions.value = response.data.data || []
   } catch (e) {
     error.value = e.response?.data?.message || '会话加载失败'
@@ -168,7 +168,7 @@ async function loadMessages(nextSessionId) {
   sessionId.value = nextSessionId
   error.value = ''
   try {
-    const response = await request.get(`/chat/messages/${nextSessionId}`)
+    const response = await request.get(`/ai/chat/messages/${nextSessionId}`)
     messages.value = response.data.data || []
     scrollToBottom()
   } catch (e) {
@@ -197,10 +197,12 @@ async function send() {
   }
   messages.value.push(userMessage)
   messages.value.push(assistantMessage)
+  // 获取响应式 proxy 引用，确保流式内容更新能触发 UI 渲染
+  const reactiveAssistant = messages.value[messages.value.length - 1]
   const currentContent = content.value
   content.value = ''
   try {
-    const response = await fetch('/api/v1/chat/stream', {
+    const response = await fetch('/api/v1/ai/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -216,11 +218,11 @@ async function send() {
     if (!response.ok || !response.body) {
       throw new Error('发送失败')
     }
-    await readStream(response, assistantMessage)
+    await readStream(response, reactiveAssistant)
     await loadSessions()
   } catch (e) {
     error.value = e.message || '发送失败'
-    if (!assistantMessage.content) {
+    if (!reactiveAssistant.content) {
       messages.value = messages.value.filter(message => message.messageId !== assistantMessage.messageId)
     }
   } finally {

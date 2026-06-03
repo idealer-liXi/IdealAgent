@@ -1,64 +1,83 @@
 package com.idealagent.domain.ai.service.chat;
 
 import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
-import com.idealagent.domain.session.model.entity.ChatMessage;
-import com.idealagent.domain.session.model.entity.ChatSession;
+import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.model.enumeration.ConfigKind;
 import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
 import com.idealagent.domain.ai.model.vo.ChatResponseVO;
-import com.idealagent.domain.session.repository.ISessionRepository;
-import com.idealagent.domain.ai.model.entity.AiConfigRecord;
 import com.idealagent.domain.ai.repository.IAiConfigRepository;
-import com.idealagent.domain.ai.model.enumeration.ConfigKind;
-import com.idealagent.domain.ai.model.entity.RagChunk;
-import com.idealagent.domain.ai.repository.IRagRepository;
-import com.idealagent.domain.ai.service.rag.DeterministicEmbeddingService;
-import com.idealagent.domain.ai.service.rag.RagService;
-import com.idealagent.domain.ai.service.rag.SimpleTextSplitter;
+import com.idealagent.domain.ai.service.augment.IAugmentService;
+import com.idealagent.domain.ai.service.dispatch.IChatDispatchService;
+import com.idealagent.domain.session.model.entity.ChatMessage;
+import com.idealagent.domain.session.model.entity.ChatSession;
+import com.idealagent.domain.session.repository.ISessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class ChatServiceTest {
     private FakeChatRepository repository;
     private FakeAiConfigRepository configRepository;
-    private FakeRagRepository ragRepository;
-    private RecordingChatClient chatClient;
+    private RecordingDispatchService dispatchService;
+    private RecordingAugmentService augmentService;
+    private RecordingChatGateway chatGateway;
     private ChatService chatService;
 
     @BeforeEach
     void setUp() {
         repository = new FakeChatRepository();
         configRepository = new FakeAiConfigRepository();
-        ragRepository = new FakeRagRepository();
-        chatClient = new RecordingChatClient();
-        chatService = new ChatService(repository, chatClient, configRepository,
-                new RagService(ragRepository, new SimpleTextSplitter(), new DeterministicEmbeddingService(), null));
+        dispatchService = new RecordingDispatchService();
+        augmentService = new RecordingAugmentService();
+        chatGateway = new RecordingChatGateway();
+        chatService = new ChatService(repository, configRepository, dispatchService, augmentService, chatGateway);
     }
 
     @Test
-    void sendCreatesSessionAndPersistsUserAndAssistantMessages() {
+    void sendCreatesSessionDispatchesSpringAiClientAndPersistsMessages() {
+        chatGateway.completeResponse = "模型回复";
+
         ChatResponseVO response = chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "你好"));
 
         assertThat(response.sessionId()).startsWith("session_");
         assertThat(response.assistantMessage().role()).isEqualTo("assistant");
-        assertThat(response.assistantMessage().content()).isEqualTo("Echo: 你好");
-        assertThat(repository.sessions).hasSize(1);
+        assertThat(response.assistantMessage().content()).isEqualTo("模型回复");
+        assertThat(dispatchService.lastClientId).isEqualTo("client_default_chat");
+        assertThat(augmentService.lastUserId).isEqualTo(7L);
+        assertThat(augmentService.lastUserMessage).isEqualTo("你好");
+        assertThat(chatGateway.lastMessages).extracting(Message::getText).containsExactly("你好");
         assertThat(repository.messages).extracting(ChatMessage::getRole).containsExactly("user", "assistant");
     }
 
     @Test
-    void sendReusesExistingSessionHistory() {
-        chatService.send(7L, new ChatRequestDTO("session_fixed", "client_default_chat", "第一句"));
-        chatService.send(7L, new ChatRequestDTO("session_fixed", "client_default_chat", "第二句"));
+    void sendPassesRagTagToAugmentService() {
+        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "怎么存向量？", "spring-ai"));
 
-        assertThat(chatClient.lastHistory).extracting(ChatMessage::getRole).containsExactly("user", "assistant", "user");
-        assertThat(repository.messages).hasSize(4);
+        assertThat(augmentService.lastRagTag).isEqualTo("spring-ai");
+    }
+
+    @Test
+    void streamEmitsDeltasAndPersistsFullAssistantMessage() {
+        chatGateway.streamDeltas = List.of("你", "好");
+        List<String> deltas = new ArrayList<>();
+
+        ChatResponseVO response = chatService.stream(7L, new ChatRequestDTO(null, "client_default_chat", "你好"), deltas::add);
+
+        assertThat(deltas).containsExactly("你", "好");
+        assertThat(response.assistantMessage().content()).isEqualTo("你好");
+        assertThat(dispatchService.lastClientId).isEqualTo("client_default_chat");
+        assertThat(repository.messages).extracting(ChatMessage::getRole).containsExactly("user", "assistant");
     }
 
     @Test
@@ -66,38 +85,6 @@ class ChatServiceTest {
         assertThatThrownBy(() -> chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", " ")))
                 .isInstanceOf(ChatException.class)
                 .hasMessage("消息内容不能为空");
-    }
-
-    @Test
-    void sendFallsBackToLocalEchoWhenClientIdIsBlank() {
-        ChatResponseVO response = chatService.send(7L, new ChatRequestDTO(null, "", "你好"));
-
-        assertThat(chatClient.lastClientId).isEqualTo("local_echo");
-        assertThat(response.assistantMessage().content()).isEqualTo("Echo: 你好");
-    }
-
-    @Test
-    void sendAddsRagContextWhenRagTagProvided() {
-        ragRepository.searchResults = List.of(new RagChunk("pgvector stores embeddings", "note.md", new float[1024]));
-
-        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "怎么存向量？", "spring-ai"));
-
-        assertThat(ragRepository.searchTag).isEqualTo("spring-ai");
-        assertThat(chatClient.lastHistory).extracting(ChatMessage::getRole).containsExactly("system", "user");
-        assertThat(chatClient.lastHistory.get(0).getContent()).contains("pgvector stores embeddings");
-    }
-
-    @Test
-    void streamEmitsDeltasAndPersistsFullAssistantMessage() {
-        chatClient.streamDeltas = List.of("你", "好");
-        List<String> deltas = new ArrayList<>();
-
-        ChatResponseVO response = chatService.stream(7L, new ChatRequestDTO(null, "client_default_chat", "你好"), deltas::add);
-
-        assertThat(deltas).containsExactly("你", "好");
-        assertThat(response.assistantMessage().content()).isEqualTo("你好");
-        assertThat(repository.messages).extracting(ChatMessage::getRole).containsExactly("user", "assistant");
-        assertThat(repository.messages.get(1).getContent()).isEqualTo("你好");
     }
 
     @Test
@@ -161,26 +148,6 @@ class ChatServiceTest {
         }
     }
 
-    private static class RecordingChatClient implements IChatClient {
-        private List<ChatMessage> lastHistory = List.of();
-        private String lastClientId;
-        private List<String> streamDeltas = List.of();
-
-        @Override
-        public String complete(String clientId, List<ChatMessage> history) {
-            lastClientId = clientId;
-            lastHistory = List.copyOf(history);
-            return "Echo: " + history.get(history.size() - 1).getContent();
-        }
-
-        @Override
-        public void stream(String clientId, List<ChatMessage> history, java.util.function.Consumer<String> onDelta) {
-            lastClientId = clientId;
-            lastHistory = List.copyOf(history);
-            streamDeltas.forEach(onDelta);
-        }
-    }
-
     private static class FakeAiConfigRepository implements IAiConfigRepository {
         private final List<AiConfigRecord> records = new ArrayList<>();
 
@@ -197,39 +164,58 @@ class ChatServiceTest {
 
         @Override
         public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
-            records.removeIf(item -> item.getConfigId().equals(record.getConfigId()));
-            records.add(record);
             return record;
         }
 
         @Override
         public void updateStatus(ConfigKind kind, String configId, Integer status) {
-            records.stream().filter(item -> item.getConfigId().equals(configId)).forEach(item -> item.setStatus(status));
         }
 
         @Override
         public void delete(ConfigKind kind, String configId) {
-            records.removeIf(item -> item.getConfigId().equals(configId));
         }
     }
 
-    private static class FakeRagRepository implements IRagRepository {
-        private String searchTag;
-        private List<RagChunk> searchResults = List.of();
+    private static class RecordingDispatchService implements IChatDispatchService {
+        private String lastClientId;
+        private final ChatClient chatClient = mock(ChatClient.class);
 
         @Override
-        public void saveChunks(Long userId, String ragTag, List<RagChunk> chunks) {
+        public ChatClient dispatchChatClient(String clientId) {
+            lastClientId = clientId;
+            return chatClient;
+        }
+    }
+
+    private static class RecordingAugmentService implements IAugmentService {
+        private Long lastUserId;
+        private String lastUserMessage;
+        private String lastRagTag;
+
+        @Override
+        public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag) {
+            lastUserId = userId;
+            lastUserMessage = userMessage;
+            lastRagTag = ragTag;
+            return List.of(new UserMessage(userMessage));
+        }
+    }
+
+    private static class RecordingChatGateway extends SpringAiChatGateway {
+        private String completeResponse = "模型回复";
+        private List<String> streamDeltas = List.of();
+        private List<Message> lastMessages = List.of();
+
+        @Override
+        public String complete(ChatClient chatClient, List<Message> messages) {
+            lastMessages = List.copyOf(messages);
+            return completeResponse;
         }
 
         @Override
-        public List<String> listTags(Long userId) {
-            return List.of();
-        }
-
-        @Override
-        public List<RagChunk> search(Long userId, String ragTag, float[] queryEmbedding, int limit) {
-            searchTag = ragTag;
-            return searchResults;
+        public void stream(ChatClient chatClient, List<Message> messages, Consumer<String> onDelta) {
+            lastMessages = List.copyOf(messages);
+            streamDeltas.forEach(onDelta);
         }
     }
 }

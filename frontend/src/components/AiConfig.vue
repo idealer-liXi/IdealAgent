@@ -209,10 +209,10 @@ function toPayload(kind, data) {
     return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: trimmed(data.content), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'model') {
-    return { ...base, name: trimmed(data.name), type: trimmed(data.type), refId: trimmed(data.refId), ownerId: ownerIdOf(data.ownerId) }
+    return { ...base, name: trimmed(data.name), type: 'chat', refId: trimmed(data.refId), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'client') {
-    return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: trimmed(data.content), refId: trimmed(data.refId), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
+    return { ...base, name: trimmed(data.name), type: 'chat', content: trimmed(data.content), refId: trimmed(data.refId), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'prompt') {
     return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: data.content, ownerId: ownerIdOf(data.ownerId) }
@@ -298,13 +298,6 @@ function toPayload(kind, data) {
                     <template #label>模型 ID</template>
                   </UiInput>
                   <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-text-secondary">类型</span>
-                    <select v-model="form.type" :class="selectClass">
-                      <option value="chat">Chat</option>
-                      <option value="embedding">Embedding</option>
-                    </select>
-                  </label>
-                  <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">引用 API</span>
                     <select v-model="form.refId" :class="selectClass">
                       <option value="">请选择 API</option>
@@ -319,12 +312,6 @@ function toPayload(kind, data) {
                   <UiInput v-model="form.name" placeholder="DeepSeek V4 Flash">
                     <template #label>名称</template>
                   </UiInput>
-                  <label class="block">
-                    <span class="mb-2 block text-sm font-medium text-text-secondary">类型</span>
-                    <select v-model="form.type" :class="selectClass">
-                      <option value="chat">Chat</option>
-                    </select>
-                  </label>
                   <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">角色</span>
                     <select v-model="form.content" :class="selectClass">

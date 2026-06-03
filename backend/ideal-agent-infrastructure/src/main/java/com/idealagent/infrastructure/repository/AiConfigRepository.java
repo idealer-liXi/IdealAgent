@@ -47,6 +47,11 @@ public class AiConfigRepository implements IAiConfigRepository {
     }
 
     @Override
+    public AiConfigRecord find(ConfigKind kind, String configId) {
+        return IAiConfigRepository.super.find(kind, configId);
+    }
+
+    @Override
     public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
         AiConfigData data = toData(record);
         switch (kind) {

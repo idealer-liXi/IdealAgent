@@ -4,7 +4,10 @@ import com.idealagent.domain.ai.model.dto.RagUploadDTO;
 import com.idealagent.domain.ai.model.entity.RagChunk;
 import com.idealagent.domain.ai.model.entity.RagFile;
 import com.idealagent.domain.ai.model.vo.RagTagVO;
-import com.idealagent.domain.ai.repository.IRagRepository;
+import com.idealagent.domain.ai.repository.IRagTagRepository;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.transformer.splitter.TokenTextSplitter;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -15,28 +18,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class RagServiceTest {
-    private FakeRagRepository repository;
+    private FakeRagVectorStore vectorStore;
+    private FakeRagTagRepository tagRepository;
     private RagService service;
 
     @BeforeEach
     void setUp() {
-        repository = new FakeRagRepository();
-        service = new RagService(repository, new SimpleTextSplitter(), new DeterministicEmbeddingService(), null);
+        vectorStore = new FakeRagVectorStore();
+        tagRepository = new FakeRagTagRepository();
+        service = new RagService(vectorStore, new TokenTextSplitter(), tagRepository, null);
     }
 
     @Test
-    void uploadFilesSplitsEmbedsAndStoresChunks() {
-        service.uploadFiles(7L, "spring-ai", List.of(new RagFile("note.md", "Spring AI supports vector search.\npgvector stores embeddings.")));
+    void uploadFilesAddsDocumentsWithKnowledgeAndUserMetadata() {
+        service.uploadFiles(7L, "spring-ai", List.of(new RagFile("note.md", "Spring AI supports vector search.")));
 
-        assertThat(repository.savedTag).isEqualTo("spring-ai");
-        assertThat(repository.savedUserId).isEqualTo(7L);
-        assertThat(repository.savedChunks).isNotEmpty();
-        assertThat(repository.savedChunks.get(0).embedding()).hasSize(1024);
+        assertThat(vectorStore.addedDocuments).isNotEmpty();
+        assertThat(vectorStore.addedDocuments)
+                .anySatisfy(document -> {
+                    assertThat(document.getText()).contains("Spring AI supports vector search.");
+                    assertThat(document.getMetadata()).containsEntry("knowledge", "spring-ai");
+                    assertThat(document.getMetadata()).containsEntry("userId", "7");
+                    assertThat(document.getMetadata()).containsEntry("source", "note.md");
+                });
     }
 
     @Test
     void listTagsReturnsUserKnowledgeTags() {
-        repository.tags = List.of("spring-ai", "pgvector");
+        tagRepository.tags = List.of("spring-ai", "pgvector");
 
         List<RagTagVO> tags = service.listTags(7L);
 
@@ -44,14 +53,19 @@ class RagServiceTest {
     }
 
     @Test
-    void retrieveUsesQueryEmbeddingAndRepositorySearch() {
-        repository.searchResults = List.of(new RagChunk("pgvector stores vectors", "note.md", new float[1024]));
+    void retrieveUsesPgVectorStoreSimilaritySearchWithKnowledgeAndUserFilter() {
+        Document result = new Document("pgvector stores vectors");
+        result.getMetadata().put("source", "note.md");
+        vectorStore.searchResults = List.of(result);
 
         List<RagChunk> chunks = service.retrieve(7L, "spring-ai", "How to store vectors?");
 
-        assertThat(repository.searchTag).isEqualTo("spring-ai");
-        assertThat(repository.searchEmbedding).hasSize(1024);
+        assertThat(vectorStore.searchRequest.getTopK()).isEqualTo(3);
+        assertThat(vectorStore.searchRequest.getQuery()).isEqualTo("How to store vectors?");
+        assertThat(vectorStore.searchRequest.getFilterExpression().toString())
+                .contains("knowledge", "spring-ai", "userId", "7");
         assertThat(chunks).extracting(RagChunk::content).containsExactly("pgvector stores vectors");
+        assertThat(chunks).extracting(RagChunk::source).containsExactly("note.md");
     }
 
     @Test
@@ -61,40 +75,29 @@ class RagServiceTest {
                 .hasMessage("知识库标签不能为空");
     }
 
-    @Test
-    void embeddingIsDeterministicAndFixedSize() {
-        DeterministicEmbeddingService embeddingService = new DeterministicEmbeddingService();
-
-        assertThat(embeddingService.embed("same text")).containsExactly(embeddingService.embed("same text"));
-        assertThat(embeddingService.embed("same text")).hasSize(1024);
-    }
-
-    private static class FakeRagRepository implements IRagRepository {
-        private Long savedUserId;
-        private String savedTag;
-        private List<RagChunk> savedChunks = new ArrayList<>();
-        private List<String> tags = new ArrayList<>();
-        private String searchTag;
-        private float[] searchEmbedding;
-        private List<RagChunk> searchResults = new ArrayList<>();
+    private static class FakeRagVectorStore implements IRagVectorStore {
+        private List<Document> addedDocuments = new ArrayList<>();
+        private SearchRequest searchRequest;
+        private List<Document> searchResults = new ArrayList<>();
 
         @Override
-        public void saveChunks(Long userId, String ragTag, List<RagChunk> chunks) {
-            savedUserId = userId;
-            savedTag = ragTag;
-            savedChunks = chunks;
+        public void add(List<Document> documents) {
+            addedDocuments = documents;
         }
+
+        @Override
+        public List<Document> similaritySearch(SearchRequest request) {
+            searchRequest = request;
+            return searchResults;
+        }
+    }
+
+    private static class FakeRagTagRepository implements IRagTagRepository {
+        private List<String> tags = new ArrayList<>();
 
         @Override
         public List<String> listTags(Long userId) {
             return tags;
-        }
-
-        @Override
-        public List<RagChunk> search(Long userId, String ragTag, float[] queryEmbedding, int limit) {
-            searchTag = ragTag;
-            searchEmbedding = queryEmbedding;
-            return searchResults;
         }
     }
 }

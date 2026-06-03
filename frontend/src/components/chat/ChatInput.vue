@@ -16,6 +16,13 @@ function handleSend() {
     emit('send')
   }
 }
+
+function handleKeydown(event) {
+  if (event.key === 'Enter' && event.ctrlKey) {
+    event.preventDefault()
+    handleSend()
+  }
+}
 </script>
 
 <template>
@@ -31,6 +38,7 @@ function handleSend() {
         :rows="3"
         class="flex-1"
         @update:model-value="$emit('update:modelValue', $event)"
+        @keydown="handleKeydown"
       />
       <UiButton
         variant="primary"

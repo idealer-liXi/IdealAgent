@@ -30,6 +30,7 @@ const baseClasses = 'w-full rounded-card-md border border-border-default bg-surf
       :disabled="disabled"
       :rows="rows"
       @input="$emit('update:modelValue', $event.target.value)"
+      @keydown="$emit('keydown', $event)"
     />
     <input
       v-else
@@ -40,6 +41,7 @@ const baseClasses = 'w-full rounded-card-md border border-border-default bg-surf
       :disabled="disabled"
       :autocomplete="autocomplete"
       @input="$emit('update:modelValue', $event.target.value)"
+      @keydown="$emit('keydown', $event)"
     />
   </label>
 </template>
