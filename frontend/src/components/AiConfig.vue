@@ -23,9 +23,12 @@ const templates = {
   client: { configId: 'client_deepseek_v4_flash', name: 'DeepSeek V4 Flash', type: 'chat', content: 'assistant', refId: '', secret: '', status: 1, ownerId: 0 },
   prompt: { configId: 'prompt_system_local', name: 'System Prompt', type: 'system', content: 'You are IdealAgent.', status: 1, ownerId: 0 },
   advisor: { configId: 'advisor_memory_local', name: 'Memory Advisor', type: 'memory', content: '{"retrieveSize":20}', status: 1, ownerId: 0 },
-  mcp: { configId: 'mcp_stdio_local', name: 'Local MCP', type: 'stdio', content: '{"command":"node","args":[]}', secret: '', status: 1, ownerId: 0 },
+  mcp: { configId: 'mcp_amap', name: 'Amap Weather', type: 'sse', content: '{"baseUri":"http://localhost:9003","sseEndpoint":"/sse","timeoutMinutes":3}', secret: '{"key":""}', status: 1, ownerId: 0 },
   config: { configId: 'config_client_prompt_local', ownerType: 'client', content: '', configType: 'prompt', refId: '', status: 1 }
 }
+
+const mcpSseDefaults = { baseUri: 'http://localhost:9003', sseEndpoint: '/sse', timeoutMinutes: 3 }
+const mcpStdioDefaults = { command: 'node', args: '[]', env: '{}', timeoutMinutes: 3 }
 
 const selectedKind = ref('api')
 const form = ref(cloneTemplate('api'))
@@ -35,6 +38,8 @@ const allRecords = ref(emptyRecordMap())
 const error = ref('')
 const message = ref('')
 const loading = ref(false)
+const mcpSseForm = ref({ ...mcpSseDefaults })
+const mcpStdioForm = ref({ ...mcpStdioDefaults })
 
 const selectedKindMeta = computed(() => kinds.find(item => item.key === selectedKind.value) || kinds[0])
 const ownerOptions = computed(() => optionsFor(form.value.ownerType))
@@ -94,7 +99,7 @@ async function saveRecord() {
     message.value = `${isEditing.value ? '已更新' : '已保存'} ${response.data.data.configId}`
     await refreshAll()
   } catch (e) {
-    error.value = e.response?.data?.message || '保存失败'
+    error.value = e.response?.data?.message || e.message || '保存失败'
   } finally {
     loading.value = false
   }
@@ -134,6 +139,9 @@ async function deleteRecord(record) {
 function editRecord(record) {
   editingConfigId.value = record.configId
   form.value = fromRecord(selectedKind.value, record)
+  if (selectedKind.value === 'mcp') {
+    syncMcpStructuredForm(form.value)
+  }
   message.value = `正在编辑 ${record.configId}`
   error.value = ''
 }
@@ -141,6 +149,9 @@ function editRecord(record) {
 function resetForm(kind = selectedKind.value) {
   editingConfigId.value = ''
   form.value = cloneTemplate(kind)
+  if (kind === 'mcp') {
+    syncMcpStructuredForm(form.value)
+  }
 }
 
 function cloneTemplate(kind) {
@@ -188,6 +199,86 @@ function onConfigTypeChange() {
   form.value.refId = ''
 }
 
+function onMcpTypeChange() {
+  if (form.value.type === 'sse') {
+    mcpSseForm.value = { ...mcpSseDefaults }
+    return
+  }
+  if (form.value.type === 'stdio') {
+    mcpStdioForm.value = { ...mcpStdioDefaults }
+  }
+}
+
+function syncMcpStructuredForm(record) {
+  const content = parseJsonObject(record.content)
+  if (record.type === 'sse') {
+    mcpSseForm.value = {
+      baseUri: stringOrDefault(content.baseUri, mcpSseDefaults.baseUri),
+      sseEndpoint: stringOrDefault(content.sseEndpoint, mcpSseDefaults.sseEndpoint),
+      timeoutMinutes: positiveNumberOrDefault(content.timeoutMinutes, mcpSseDefaults.timeoutMinutes)
+    }
+    return
+  }
+  mcpStdioForm.value = {
+    command: stringOrDefault(content.command, mcpStdioDefaults.command),
+    args: JSON.stringify(Array.isArray(content.args) ? content.args : [], null, 2),
+    env: JSON.stringify(content.env && typeof content.env === 'object' && !Array.isArray(content.env) ? content.env : {}, null, 2),
+    timeoutMinutes: positiveNumberOrDefault(content.timeoutMinutes, mcpStdioDefaults.timeoutMinutes)
+  }
+}
+
+function buildMcpContent(type) {
+  if (type === 'sse') {
+    return JSON.stringify({
+      baseUri: trimmed(mcpSseForm.value.baseUri),
+      sseEndpoint: trimmed(mcpSseForm.value.sseEndpoint) || '/sse',
+      timeoutMinutes: positiveNumberOrDefault(mcpSseForm.value.timeoutMinutes, 3)
+    })
+  }
+  const args = parseJsonArray(mcpStdioForm.value.args, 'stdio args')
+  const env = parseJsonObjectStrict(mcpStdioForm.value.env, 'stdio env')
+  return JSON.stringify({
+    command: trimmed(mcpStdioForm.value.command),
+    args,
+    env,
+    timeoutMinutes: positiveNumberOrDefault(mcpStdioForm.value.timeoutMinutes, 3)
+  })
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch (e) {
+    return {}
+  }
+}
+
+function parseJsonObjectStrict(value, label) {
+  const parsed = JSON.parse(value || '{}')
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label} 必须是 JSON Object`)
+  }
+  return parsed
+}
+
+function parseJsonArray(value, label) {
+  const parsed = JSON.parse(value || '[]')
+  if (!Array.isArray(parsed)) {
+    throw new Error(`${label} 必须是 JSON Array`)
+  }
+  return parsed
+}
+
+function stringOrDefault(value, fallback) {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function positiveNumberOrDefault(value, fallback) {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : fallback
+}
+
 function trimmed(value) {
   return typeof value === 'string' ? value.trim() : value
 }
@@ -221,7 +312,7 @@ function toPayload(kind, data) {
     return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: data.content, ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'mcp') {
-    return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: data.content, secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
+    return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: buildMcpContent(trimmed(data.type)), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
   }
   return {
     ...base,
@@ -369,15 +460,46 @@ function toPayload(kind, data) {
                   </UiInput>
                   <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">类型</span>
-                    <select v-model="form.type" :class="selectClass">
+                    <select v-model="form.type" :class="selectClass" @change="onMcpTypeChange">
                       <option value="stdio">stdio</option>
                       <option value="sse">sse</option>
                     </select>
                   </label>
-                  <UiInput v-model="form.content" type="textarea" :rows="5" placeholder='{"command":"node","args":[]}'>
-                    <template #label>配置内容</template>
-                  </UiInput>
-                  <UiInput v-model="form.secret" placeholder="可选密钥或请求头配置">
+
+                  <template v-if="form.type === 'sse'">
+                    <UiInput v-model="mcpSseForm.baseUri" placeholder="http://localhost:9003">
+                      <template #label>baseUri</template>
+                    </UiInput>
+                    <UiInput v-model="mcpSseForm.sseEndpoint" placeholder="/sse">
+                      <template #label>sseEndpoint</template>
+                    </UiInput>
+                    <UiInput v-model.number="mcpSseForm.timeoutMinutes" type="number" placeholder="3">
+                      <template #label>timeoutMinutes</template>
+                    </UiInput>
+                    <p class="rounded-card bg-surface px-3 py-2 text-xs text-text-tertiary">
+                      保存时自动生成 content：{"baseUri":"...","sseEndpoint":"/sse","timeoutMinutes":3}
+                    </p>
+                  </template>
+
+                  <template v-else>
+                    <UiInput v-model="mcpStdioForm.command" placeholder="node">
+                      <template #label>command</template>
+                    </UiInput>
+                    <UiInput v-model="mcpStdioForm.args" type="textarea" :rows="4" placeholder='["server.js"]'>
+                      <template #label>args JSON Array</template>
+                    </UiInput>
+                    <UiInput v-model="mcpStdioForm.env" type="textarea" :rows="4" placeholder='{"NODE_ENV":"production"}'>
+                      <template #label>env JSON Object</template>
+                    </UiInput>
+                    <UiInput v-model.number="mcpStdioForm.timeoutMinutes" type="number" placeholder="3">
+                      <template #label>timeoutMinutes</template>
+                    </UiInput>
+                    <p class="rounded-card bg-surface px-3 py-2 text-xs text-text-tertiary">
+                      保存时自动生成 content：{"command":"node","args":[],"env":{},"timeoutMinutes":3}
+                    </p>
+                  </template>
+
+                  <UiInput v-model="form.secret" type="textarea" :rows="6" placeholder='{"cookie":"...","categories":"后端","tags":"IdealAgent,MCP","coverUrl":"https://..."}'>
                     <template #label>密钥</template>
                   </UiInput>
                 </template>

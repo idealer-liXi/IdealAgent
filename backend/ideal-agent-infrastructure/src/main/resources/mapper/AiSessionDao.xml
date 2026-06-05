@@ -23,10 +23,24 @@
         LIMIT 1
     </select>
 
+    <select id="queryBySessionIdAndUserIdAndType" resultMap="dataMap">
+        SELECT session_id, session_type, session_title, user_id, target_id, create_time, update_time
+        FROM ai_session
+        WHERE session_id = #{sessionId} AND user_id = #{userId} AND session_type = #{type}
+        LIMIT 1
+    </select>
+
     <select id="listByUserId" resultMap="dataMap">
         SELECT session_id, session_type, session_title, user_id, target_id, create_time, update_time
         FROM ai_session
         WHERE user_id = #{userId} AND session_type = 'chat'
+        ORDER BY update_time DESC
+    </select>
+
+    <select id="listByUserIdAndType" resultMap="dataMap">
+        SELECT session_id, session_type, session_title, user_id, target_id, create_time, update_time
+        FROM ai_session
+        WHERE user_id = #{userId} AND session_type = #{type}
         ORDER BY update_time DESC
     </select>
 </mapper>

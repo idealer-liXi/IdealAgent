@@ -15,6 +15,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const baseClasses = 'w-full rounded-card-md border border-border-default bg-surface px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary outline-none transition-all duration-150 ease-out focus:border-accent focus:bg-elevated focus:ring-2 focus:ring-accent-light'
+const textareaClasses = `${baseClasses} min-h-[96px] resize-y`
 </script>
 
 <template>
@@ -24,7 +25,7 @@ const baseClasses = 'w-full rounded-card-md border border-border-default bg-surf
     </span>
     <textarea
       v-if="type === 'textarea'"
-      :class="baseClasses"
+      :class="textareaClasses"
       :value="modelValue"
       :placeholder="placeholder"
       :disabled="disabled"

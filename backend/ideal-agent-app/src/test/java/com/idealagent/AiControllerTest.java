@@ -6,8 +6,10 @@ import com.idealagent.domain.ai.model.dto.RagUploadDTO;
 import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
 import com.idealagent.domain.ai.model.vo.ChatResponseVO;
 import com.idealagent.domain.ai.model.vo.RagTagVO;
+import com.idealagent.domain.ai.model.vo.WorkAgentOptionVO;
 import com.idealagent.domain.ai.service.chat.ChatService;
 import com.idealagent.domain.ai.service.rag.RagService;
+import com.idealagent.domain.ai.service.work.WorkService;
 import com.idealagent.domain.session.model.vo.ChatMessageVO;
 import com.idealagent.domain.session.model.vo.ChatSessionVO;
 import com.idealagent.domain.user.model.vo.AuthUserVO;
@@ -60,11 +62,14 @@ class AiControllerTest {
     private RagService ragService;
 
     @MockitoBean
+    private WorkService workService;
+
+    @MockitoBean
     private ITokenParser tokenParser;
 
     @Test
     void controllerUsesExplicitExecutorForStreaming() throws Exception {
-        Constructor<AiController> constructor = AiController.class.getConstructor(ChatService.class, RagService.class, Executor.class);
+        Constructor<AiController> constructor = AiController.class.getConstructor(ChatService.class, RagService.class, WorkService.class, Executor.class);
 
         assertThat(constructor).isNotNull();
     }
@@ -131,6 +136,18 @@ class AiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].clientId").value("client_default_chat"))
                 .andExpect(jsonPath("$.data[0].modelName").value("gpt-4o-mini"));
+    }
+
+    @Test
+    void workAgentsReturnsEnabledAgentOptions() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "user"));
+        when(workService.listAgents()).thenReturn(List.of(new WorkAgentOptionVO(
+                "agent_default_step", "默认 Step Agent", "step", "执行步骤型任务")));
+
+        mockMvc.perform(get("/ai/work/agents").header("Authorization", "Bearer token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].agentId").value("agent_default_step"))
+                .andExpect(jsonPath("$.data[0].agentType").value("step"));
     }
 
     @Test

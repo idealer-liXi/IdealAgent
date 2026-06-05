@@ -45,6 +45,33 @@ class ChatRepositoryTest {
         assertThat(repository.listMessages("session_1", 7L)).extracting(ChatMessage::getContent).containsExactly("hello");
     }
 
+    @Test
+    void listSessionsByTypeOnlyReturnsRequestedType() {
+        repository.saveSession(session("session_chat", "chat", 7L));
+        repository.saveSession(session("session_work", "work", 7L));
+
+        List<ChatSession> sessions = repository.listSessions(7L, "work");
+
+        assertThat(sessions).extracting(ChatSession::getSessionId).containsExactly("session_work");
+    }
+
+    @Test
+    void findSessionByTypeRejectsDifferentType() {
+        repository.saveSession(session("session_1", "chat", 7L));
+
+        assertThat(repository.findSession("session_1", 7L, "work")).isEmpty();
+    }
+
+    private ChatSession session(String sessionId, String type, Long userId) {
+        ChatSession session = new ChatSession();
+        session.setSessionId(sessionId);
+        session.setType(type);
+        session.setTitle(sessionId);
+        session.setUserId(userId);
+        session.setTargetId("target_1");
+        return session;
+    }
+
     private static class FakeSessionDao implements IAiSessionDao {
         private final List<AiSession> sessions = new ArrayList<>();
 
@@ -63,8 +90,21 @@ class ChatRepositoryTest {
         }
 
         @Override
+        public AiSession queryBySessionIdAndUserIdAndType(String sessionId, Long userId, String type) {
+            return sessions.stream()
+                    .filter(session -> session.getSessionId().equals(sessionId) && session.getUserId().equals(userId) && session.getSessionType().equals(type))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        @Override
         public List<AiSession> listByUserId(Long userId) {
             return sessions.stream().filter(session -> session.getUserId().equals(userId)).toList();
+        }
+
+        @Override
+        public List<AiSession> listByUserIdAndType(Long userId, String type) {
+            return sessions.stream().filter(session -> session.getUserId().equals(userId) && session.getSessionType().equals(type)).toList();
         }
     }
 

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.idealagent.infrastructure.persistent.dao.IAiAgentDao">
+    <resultMap id="dataMap" type="com.idealagent.infrastructure.persistent.po.AiAgent">
+        <id column="agent_id" property="agentId"/>
+        <result column="agent_name" property="agentName"/>
+        <result column="agent_type" property="agentType"/>
+        <result column="agent_desc" property="agentDesc"/>
+        <result column="model_id" property="modelId"/>
+        <result column="template_id" property="templateId"/>
+        <result column="agent_status" property="agentStatus"/>
+        <result column="agent_from" property="agentFrom"/>
+    </resultMap>
+
+    <select id="queryByAgentId" resultMap="dataMap">
+        SELECT agent_id, agent_name, agent_type, agent_desc, model_id, template_id, agent_status, agent_from
+        FROM ai_agent
+        WHERE agent_id = #{agentId}
+        LIMIT 1
+    </select>
+
+    <select id="listEnabledWorkAgents" resultMap="dataMap">
+        SELECT agent_id, agent_name, agent_type, agent_desc, model_id, template_id, agent_status, agent_from
+        FROM ai_agent
+        WHERE agent_status = 1
+          AND agent_type IN ('step', 'loop', 'react')
+        ORDER BY agent_id ASC
+    </select>
+
+    <select id="listAll" resultMap="dataMap">
+        SELECT agent_id, agent_name, agent_type, agent_desc, model_id, template_id, agent_status, agent_from
+        FROM ai_agent
+        ORDER BY id DESC
+    </select>
+
+    <insert id="insert" parameterType="com.idealagent.infrastructure.persistent.po.AiAgent">
+        INSERT INTO ai_agent (agent_id, agent_name, agent_type, agent_desc, model_id, template_id, agent_status, agent_from)
+        VALUES (#{agentId}, #{agentName}, #{agentType}, #{agentDesc}, #{modelId}, #{templateId}, #{agentStatus}, COALESCE(#{agentFrom}, 0))
+    </insert>
+
+    <update id="update" parameterType="com.idealagent.infrastructure.persistent.po.AiAgent">
+        UPDATE ai_agent
+        SET agent_name = #{agentName}, agent_type = #{agentType}, agent_desc = #{agentDesc}, model_id = #{modelId}, template_id = #{templateId}, agent_status = #{agentStatus}
+        WHERE agent_id = #{agentId}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE ai_agent SET agent_status = #{status} WHERE agent_id = #{agentId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM ai_agent WHERE agent_id = #{agentId}
+    </delete>
+</mapper>

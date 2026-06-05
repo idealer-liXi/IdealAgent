@@ -12,5 +12,9 @@ public interface IAiSessionDao {
 
     AiSession queryBySessionIdAndUserId(@Param("sessionId") String sessionId, @Param("userId") Long userId);
 
+    AiSession queryBySessionIdAndUserIdAndType(@Param("sessionId") String sessionId, @Param("userId") Long userId, @Param("type") String type);
+
     List<AiSession> listByUserId(@Param("userId") Long userId);
+
+    List<AiSession> listByUserIdAndType(@Param("userId") Long userId, @Param("type") String type);
 }

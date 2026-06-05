@@ -7,6 +7,8 @@ import com.idealagent.domain.ai.service.armory.mcp.IMcpClientArmory;
 import com.idealagent.domain.ai.service.mcp.McpException;
 import io.modelcontextprotocol.client.McpSyncClient;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -15,6 +17,7 @@ import java.util.List;
 
 @Service
 public class McpToolService implements IMcpToolService {
+    private static final Logger log = LoggerFactory.getLogger(McpToolService.class);
     private static final int ENABLED = 1;
 
     private final IAiConfigRepository aiConfigRepository;
@@ -51,7 +54,11 @@ public class McpToolService implements IMcpToolService {
             if (!enabled(mcpRecord)) {
                 continue;
             }
-            clients.add(mcpClientArmory.build(mcpRecord, userId));
+            try {
+                clients.add(mcpClientArmory.build(mcpRecord, userId));
+            } catch (RuntimeException e) {
+                log.warn("MCP 初始化失败，已跳过：clientId={}, bindingId={}, mcpId={}, reason={}", clientId, binding.getConfigId(), mcpRecord.getConfigId(), e.getMessage());
+            }
         }
         if (clients.isEmpty()) {
             return McpToolHandle.empty();

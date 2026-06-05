@@ -28,6 +28,11 @@ public class ChatRepository implements ISessionRepository {
     }
 
     @Override
+    public Optional<ChatSession> findSession(String sessionId, Long userId, String type) {
+        return Optional.ofNullable(toSession(sessionDao.queryBySessionIdAndUserIdAndType(sessionId, userId, type)));
+    }
+
+    @Override
     public ChatSession saveSession(ChatSession session) {
         sessionDao.insert(toSessionPo(session));
         return session;
@@ -36,6 +41,11 @@ public class ChatRepository implements ISessionRepository {
     @Override
     public List<ChatSession> listSessions(Long userId) {
         return sessionDao.listByUserId(userId).stream().map(this::toSession).toList();
+    }
+
+    @Override
+    public List<ChatSession> listSessions(Long userId, String type) {
+        return sessionDao.listByUserIdAndType(userId, type).stream().map(this::toSession).toList();
     }
 
     @Override

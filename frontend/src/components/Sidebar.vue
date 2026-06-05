@@ -10,6 +10,8 @@ const profile = computed(() => getStoredProfile())
 const navItems = [
   { path: '/welcome', label: 'Welcome', description: '仪表盘' },
   { path: '/chat', label: 'Chat', description: '对话会话' },
+  { path: '/work', label: 'Work', description: '智能体任务' },
+  { path: '/agents', label: 'Agent', description: '编排管理' },
   { path: '/config', label: 'Config', description: '配置管理' }
 ]
 

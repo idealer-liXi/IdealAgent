@@ -1,10 +1,12 @@
 package com.idealagent.trigger.handler;
 
 import com.idealagent.domain.user.service.auth.AuthException;
+import com.idealagent.domain.ai.service.agent.AgentManagementException;
 import com.idealagent.domain.ai.service.chat.ChatException;
 import com.idealagent.domain.ai.service.config.AiConfigException;
 import com.idealagent.domain.ai.service.mcp.McpException;
 import com.idealagent.domain.ai.service.rag.RagException;
+import com.idealagent.domain.ai.service.work.WorkException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -26,6 +28,12 @@ public class GlobalExceptionHandler {
         return Result.failure(e.getMessage());
     }
 
+    @ExceptionHandler(AgentManagementException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleAgentManagementException(AgentManagementException e) {
+        return Result.failure(e.getMessage());
+    }
+
     @ExceptionHandler(ChatException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleChatException(ChatException e) {
@@ -41,6 +49,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(McpException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleMcpException(McpException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(WorkException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleWorkException(WorkException e) {
         return Result.failure(e.getMessage());
     }
 

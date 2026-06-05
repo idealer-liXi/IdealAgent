@@ -134,6 +134,11 @@ class ChatServiceTest {
         }
 
         @Override
+        public Optional<ChatSession> findSession(String sessionId, Long userId, String type) {
+            return findSession(sessionId, userId).filter(session -> type.equals(session.getType()));
+        }
+
+        @Override
         public ChatSession saveSession(ChatSession session) {
             if (findSession(session.getSessionId(), session.getUserId()).isEmpty()) {
                 sessions.add(session);
@@ -144,6 +149,11 @@ class ChatServiceTest {
         @Override
         public List<ChatSession> listSessions(Long userId) {
             return sessions.stream().filter(session -> session.getUserId().equals(userId)).toList();
+        }
+
+        @Override
+        public List<ChatSession> listSessions(Long userId, String type) {
+            return sessions.stream().filter(session -> session.getUserId().equals(userId) && type.equals(session.getType())).toList();
         }
 
         @Override

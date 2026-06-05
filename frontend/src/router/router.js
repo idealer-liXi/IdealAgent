@@ -3,6 +3,8 @@ import Welcome from '../components/Welcome.vue'
 import Auth from '../components/Auth.vue'
 import AiConfig from '../components/AiConfig.vue'
 import Chat from '../components/Chat.vue'
+import Work from '../components/Work.vue'
+import AgentAdmin from '../components/AgentAdmin.vue'
 import { getToken } from '../utils/auth'
 
 const routes = [
@@ -10,7 +12,9 @@ const routes = [
   { path: '/', redirect: '/welcome' },
   { path: '/welcome', name: 'welcome', component: Welcome, meta: { requiresAuth: true } },
   { path: '/config', name: 'config', component: AiConfig, meta: { requiresAuth: true } },
-  { path: '/chat', name: 'chat', component: Chat, meta: { requiresAuth: true } }
+  { path: '/chat', name: 'chat', component: Chat, meta: { requiresAuth: true } },
+  { path: '/work', name: 'work', component: Work, meta: { requiresAuth: true } },
+  { path: '/agents', name: 'agents', component: AgentAdmin, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({

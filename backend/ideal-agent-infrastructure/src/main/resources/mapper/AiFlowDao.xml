@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.idealagent.infrastructure.persistent.dao.IAiFlowDao">
+    <resultMap id="dataMap" type="com.idealagent.infrastructure.persistent.po.AiFlow">
+        <id column="flow_id" property="flowId"/>
+        <result column="agent_id" property="agentId"/>
+        <result column="client_id" property="clientId"/>
+        <result column="role_type" property="roleType"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="flow_status" property="flowStatus"/>
+        <result column="prompt_id" property="promptId"/>
+        <result column="prompt_content" property="promptContent"/>
+    </resultMap>
+
+    <select id="listEnabledByAgentId" resultMap="dataMap">
+        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
+               c.ref_id AS prompt_id,
+               p.prompt_content AS prompt_content
+        FROM ai_flow f
+        LEFT JOIN ai_config c ON c.owner_type = 'flow'
+            AND c.owner_id = f.flow_id
+            AND c.config_type = 'prompt'
+            AND c.config_status = 1
+        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
+            AND p.prompt_status = 1
+        WHERE f.agent_id = #{agentId}
+          AND f.flow_status = 1
+        ORDER BY f.sort_order ASC
+    </select>
+
+    <select id="listByAgentId" resultMap="dataMap">
+        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
+               c.ref_id AS prompt_id,
+               p.prompt_content AS prompt_content
+        FROM ai_flow f
+        LEFT JOIN ai_config c ON c.owner_type = 'flow'
+            AND c.owner_id = f.flow_id
+            AND c.config_type = 'prompt'
+        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
+        WHERE f.agent_id = #{agentId}
+        ORDER BY f.sort_order ASC
+    </select>
+
+    <select id="queryByFlowId" resultMap="dataMap">
+        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
+               c.ref_id AS prompt_id,
+               p.prompt_content AS prompt_content
+        FROM ai_flow f
+        LEFT JOIN ai_config c ON c.owner_type = 'flow'
+            AND c.owner_id = f.flow_id
+            AND c.config_type = 'prompt'
+        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
+        WHERE f.flow_id = #{flowId}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" parameterType="com.idealagent.infrastructure.persistent.po.AiFlow">
+        INSERT INTO ai_flow (flow_id, agent_id, client_id, role_type, sort_order, flow_status)
+        VALUES (#{flowId}, #{agentId}, #{clientId}, #{roleType}, #{sortOrder}, #{flowStatus})
+    </insert>
+
+    <update id="update" parameterType="com.idealagent.infrastructure.persistent.po.AiFlow">
+        UPDATE ai_flow
+        SET agent_id = #{agentId}, client_id = #{clientId}, role_type = #{roleType}, sort_order = #{sortOrder}, flow_status = #{flowStatus}
+        WHERE flow_id = #{flowId}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE ai_flow SET flow_status = #{status} WHERE flow_id = #{flowId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM ai_flow WHERE flow_id = #{flowId}
+    </delete>
+</mapper>

@@ -244,5 +244,10 @@ class AiConfigRepositoryTest {
         public int deleteConfig(String configId) {
             return 1;
         }
+
+        @Override
+        public int deleteConfigByOwner(String ownerId, String ownerType, String configType) {
+            return 1;
+        }
     }
 }

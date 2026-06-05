@@ -77,4 +77,6 @@ public interface IAiConfigDao {
     int updateConfigStatus(@Param("configId") String configId, @Param("status") Integer status);
 
     int deleteConfig(String configId);
+
+    int deleteConfigByOwner(@Param("ownerId") String ownerId, @Param("ownerType") String ownerType, @Param("configType") String configType);
 }

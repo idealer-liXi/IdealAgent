@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS ai_mcp (
   mcp_name VARCHAR(128) NOT NULL,
   mcp_type VARCHAR(32) NOT NULL,
   mcp_config TEXT NOT NULL,
-  mcp_secret VARCHAR(512) DEFAULT NULL,
+  mcp_secret TEXT DEFAULT NULL,
   mcp_timeout INT NOT NULL DEFAULT 3,
   mcp_status TINYINT NOT NULL DEFAULT 1,
   mcp_from BIGINT NOT NULL DEFAULT 0,

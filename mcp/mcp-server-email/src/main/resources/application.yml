@@ -1,0 +1,29 @@
+server:
+  port: 9004
+  servlet:
+    encoding:
+      charset: UTF-8
+      force: true
+      enabled: true
+
+spring:
+  application:
+    name: mcp-server-email
+  ai:
+    mcp:
+      server:
+        name: mcp-server-email
+        version: 1.0.0
+
+logging:
+  level:
+    root: info
+    org.springframework.ai.mcp: debug
+    io.modelcontextprotocol: debug
+  config: classpath:logback-spring.xml
+
+ideal-agent:
+  mcp:
+    header:
+      secret: X-IdealAgent-Mcp-Secret
+      user-id: X-IdealAgent-Mcp-UserId

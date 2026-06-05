@@ -197,4 +197,11 @@
     <delete id="deleteConfig">
         DELETE FROM ai_config WHERE config_id = #{configId}
     </delete>
+
+    <delete id="deleteConfigByOwner">
+        DELETE FROM ai_config
+        WHERE owner_id = #{ownerId}
+          AND owner_type = #{ownerType}
+          AND config_type = #{configType}
+    </delete>
 </mapper>

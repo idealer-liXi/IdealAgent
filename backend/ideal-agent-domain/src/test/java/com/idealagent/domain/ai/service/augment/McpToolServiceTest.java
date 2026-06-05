@@ -11,8 +11,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +63,20 @@ class McpToolServiceTest {
         assertThatThrownBy(() -> service.augmentMcpTool(7L, "client_chat"))
                 .isInstanceOf(McpException.class)
                 .hasMessage("MCP 配置不存在");
+    }
+
+    @Test
+    void augmentMcpToolSkipsFailedMcpAndKeepsWorkingBindings() {
+        repository.add(ConfigKind.CONFIG, binding("bind_failed", "client_chat", "mcp_failed", 1));
+        repository.add(ConfigKind.CONFIG, binding("bind_working", "client_chat", "mcp_working", 1));
+        repository.add(ConfigKind.MCP, mcp("mcp_failed", 1));
+        repository.add(ConfigKind.MCP, mcp("mcp_working", 1));
+        armory.fail("mcp_failed");
+
+        McpToolHandle handle = service.augmentMcpTool(7L, "client_chat");
+
+        assertThat(handle.toolCallbackProvider()).isNotNull();
+        assertThat(armory.builtIds).containsExactly("mcp_failed", "mcp_working");
     }
 
     private AiConfigRecord binding(String id, String clientId, String mcpId, Integer status) {
@@ -117,12 +133,20 @@ class McpToolServiceTest {
 
     private static class RecordingMcpClientArmory implements IMcpClientArmory {
         private final List<String> builtIds = new ArrayList<>();
+        private final Set<String> failedIds = new HashSet<>();
         private Long lastUserId;
+
+        void fail(String configId) {
+            failedIds.add(configId);
+        }
 
         @Override
         public McpSyncClient build(AiConfigRecord mcpRecord, Long userId) {
             builtIds.add(mcpRecord.getConfigId());
             lastUserId = userId;
+            if (failedIds.contains(mcpRecord.getConfigId())) {
+                throw new McpException("MCP 工具初始化失败");
+            }
             return mock(McpSyncClient.class);
         }
     }

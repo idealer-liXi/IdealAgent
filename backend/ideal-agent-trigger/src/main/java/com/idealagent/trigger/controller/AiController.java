@@ -3,13 +3,18 @@ package com.idealagent.trigger.controller;
 import com.idealagent.api.IAiApi;
 import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
 import com.idealagent.domain.ai.model.dto.RagUploadDTO;
+import com.idealagent.domain.ai.model.dto.WorkRequestDTO;
+import com.idealagent.domain.ai.model.entity.ExecuteResponseEntity;
 import com.idealagent.domain.ai.model.entity.RagFile;
 import com.idealagent.domain.ai.model.vo.ChatClientOptionVO;
 import com.idealagent.domain.ai.model.vo.ChatResponseVO;
 import com.idealagent.domain.ai.model.vo.RagTagVO;
+import com.idealagent.domain.ai.model.vo.WorkAgentOptionVO;
 import com.idealagent.domain.ai.service.chat.ChatService;
 import com.idealagent.domain.ai.service.rag.RagException;
 import com.idealagent.domain.ai.service.rag.RagService;
+import com.idealagent.domain.ai.service.work.WorkEventSink;
+import com.idealagent.domain.ai.service.work.WorkService;
 import com.idealagent.domain.session.model.vo.ChatMessageVO;
 import com.idealagent.domain.session.model.vo.ChatSessionVO;
 import com.idealagent.trigger.context.UserContext;
@@ -38,11 +43,13 @@ import java.util.concurrent.Executor;
 public class AiController implements IAiApi {
     private final ChatService chatService;
     private final RagService ragService;
+    private final WorkService workService;
     private final Executor aiSseExecutor;
 
-    public AiController(ChatService chatService, RagService ragService, @Qualifier("aiSseExecutor") Executor aiSseExecutor) {
+    public AiController(ChatService chatService, RagService ragService, WorkService workService, @Qualifier("aiSseExecutor") Executor aiSseExecutor) {
         this.chatService = chatService;
         this.ragService = ragService;
+        this.workService = workService;
         this.aiSseExecutor = aiSseExecutor;
     }
 
@@ -74,6 +81,45 @@ public class AiController implements IAiApi {
             }
         }, aiSseExecutor);
         return emitter;
+    }
+
+    @PostMapping(value = "/work/execute", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Override
+    public SseEmitter executeWork(@RequestBody WorkRequestDTO request) {
+        SseEmitter emitter = new SseEmitter(60_000L);
+        Long userId = UserContext.userId();
+        CompletableFuture.runAsync(() -> {
+            WorkEventSink sink = new WorkEventSink() {
+                @Override
+                public void message(ExecuteResponseEntity response) {
+                    sendEvent(emitter, "message", response);
+                }
+
+                @Override
+                public void complete(ExecuteResponseEntity response) {
+                    sendEvent(emitter, "complete", response);
+                }
+
+                @Override
+                public void error(String message) {
+                    sendEvent(emitter, "error", message);
+                }
+            };
+            try {
+                workService.execute(userId, request, sink);
+            } catch (Exception e) {
+                sink.error(e.getMessage());
+            } finally {
+                complete(emitter);
+            }
+        }, aiSseExecutor);
+        return emitter;
+    }
+
+    @GetMapping("/work/agents")
+    @Override
+    public Result<List<WorkAgentOptionVO>> workAgents() {
+        return Result.success(workService.listAgents());
     }
 
     @GetMapping("/chat/sessions")
