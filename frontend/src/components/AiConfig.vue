@@ -22,7 +22,7 @@ const templates = {
   model: { configId: 'model_deepseek_v4_flash', name: 'deepseek-v4-flash', type: 'chat', refId: '', status: 1, ownerId: 0 },
   client: { configId: 'client_deepseek_v4_flash', name: 'DeepSeek V4 Flash', type: 'chat', content: 'assistant', refId: '', secret: '', status: 1, ownerId: 0 },
   prompt: { configId: 'prompt_system_local', name: 'System Prompt', type: 'system', content: 'You are IdealAgent.', status: 1, ownerId: 0 },
-  advisor: { configId: 'advisor_memory_local', name: 'Memory Advisor', type: 'memory', content: '{"retrieveSize":20}', status: 1, ownerId: 0 },
+  advisor: { configId: 'advisor_memory_local', name: 'Memory Advisor', type: 'Memory', content: '{"maxMessages":20}', status: 1, ownerId: 0 },
   mcp: { configId: 'mcp_amap', name: 'Amap Weather', type: 'sse', content: '{"baseUri":"http://localhost:9003","sseEndpoint":"/sse","timeoutMinutes":3}', secret: '{"key":""}', status: 1, ownerId: 0 },
   config: { configId: 'config_client_prompt_local', ownerType: 'client', content: '', configType: 'prompt', refId: '', status: 1 }
 }
@@ -163,6 +163,9 @@ function fromRecord(kind, record) {
   next.configId = record.configId || ''
   next.name = record.name || ''
   next.type = record.type || ''
+  if (kind === 'advisor') {
+    next.type = normalizeAdvisorType(next.type)
+  }
   next.content = record.content || ''
   next.secret = record.secret || ''
   next.refId = record.refId || ''
@@ -186,6 +189,12 @@ function optionLabel(record) {
   return `${label} (${record.configId})`
 }
 
+function normalizeAdvisorType(type) {
+  if ((type || '').toLowerCase() === 'memory') return 'Memory'
+  if ((type || '').toLowerCase() === 'rag') return 'Rag'
+  return type || 'Memory'
+}
+
 function onClientModelChange() {
   const model = optionsFor('model').find(item => item.configId === form.value.refId)
   form.value.secret = model?.name || ''
@@ -206,6 +215,16 @@ function onMcpTypeChange() {
   }
   if (form.value.type === 'stdio') {
     mcpStdioForm.value = { ...mcpStdioDefaults }
+  }
+}
+
+function onAdvisorTypeChange() {
+  if (form.value.type === 'Memory') {
+    form.value.content = '{"maxMessages":20}'
+    return
+  }
+  if (form.value.type === 'Rag') {
+    form.value.content = '{"topK":4,"filterExpression":"source == \\\"note.md\\\""}'
   }
 }
 
@@ -445,11 +464,12 @@ function toPayload(kind, data) {
                   </UiInput>
                   <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">类型</span>
-                    <select v-model="form.type" :class="selectClass">
-                      <option value="memory">Memory</option>
+                    <select v-model="form.type" :class="selectClass" @change="onAdvisorTypeChange">
+                      <option value="Memory">Memory</option>
+                      <option value="Rag">Rag</option>
                     </select>
                   </label>
-                  <UiInput v-model="form.content" type="textarea" :rows="5" placeholder='{"retrieveSize":20}'>
+                  <UiInput v-model="form.content" type="textarea" :rows="5" placeholder='{"maxMessages":20} 或 {"topK":4,"filterExpression":"source == &quot;note.md&quot;"}'>
                     <template #label>配置内容</template>
                   </UiInput>
                 </template>

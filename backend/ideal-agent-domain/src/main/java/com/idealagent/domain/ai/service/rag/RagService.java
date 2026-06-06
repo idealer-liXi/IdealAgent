@@ -8,6 +8,8 @@ import com.idealagent.domain.ai.repository.IRagTagRepository;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.filter.Filter;
+import org.springframework.ai.vectorstore.filter.FilterExpressionTextParser;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -71,21 +73,38 @@ public class RagService {
     }
 
     public List<RagChunk> retrieve(Long userId, String ragTag, String query) {
+        return retrieve(userId, ragTag, query, RETRIEVE_LIMIT);
+    }
+
+    public List<RagChunk> retrieve(Long userId, String ragTag, String query, Integer topK) {
+        return retrieve(userId, ragTag, query, topK, null);
+    }
+
+    public List<RagChunk> retrieve(Long userId, String ragTag, String query, Integer topK, String filterExpression) {
         if (!StringUtils.hasText(ragTag)) {
             return List.of();
         }
         validateUserAndTag(userId, ragTag);
         FilterExpressionBuilder builder = new FilterExpressionBuilder();
+        Filter.Expression baseExpression = builder.and(
+                builder.eq("knowledge", ragTag),
+                builder.eq("userId", String.valueOf(userId))).build();
         SearchRequest request = SearchRequest.builder()
                 .query(query)
-                .topK(RETRIEVE_LIMIT)
-                .filterExpression(builder.and(
-                        builder.eq("knowledge", ragTag),
-                        builder.eq("userId", String.valueOf(userId))).build())
+                .topK(topK != null && topK > 0 ? topK : RETRIEVE_LIMIT)
+                .filterExpression(combine(baseExpression, filterExpression))
                 .build();
         return vectorStore.similaritySearch(request).stream()
                 .map(document -> new RagChunk(document.getText(), source(document.getMetadata()), new float[0]))
                 .toList();
+    }
+
+    private Filter.Expression combine(Filter.Expression baseExpression, String filterExpression) {
+        if (!StringUtils.hasText(filterExpression)) {
+            return baseExpression;
+        }
+        Filter.Expression advisorExpression = new FilterExpressionTextParser().parse(filterExpression);
+        return new Filter.Expression(Filter.ExpressionType.AND, baseExpression, advisorExpression);
     }
 
     private void validateUserAndTag(Long userId, String ragTag) {

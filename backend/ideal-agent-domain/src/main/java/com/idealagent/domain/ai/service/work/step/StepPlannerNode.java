@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.idealagent.domain.ai.model.entity.ExecuteRequestEntity;
 import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.service.armory.IChatClientArmory;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.chat.RuntimeMessageBuilder;
 import com.idealagent.domain.ai.service.work.ExecuteContext;
 import com.idealagent.domain.ai.service.work.WorkChatGateway;
 import com.idealagent.domain.ai.service.work.WorkEventSink;
@@ -18,15 +20,15 @@ import static com.idealagent.domain.ai.service.work.step.StepConstants.PLANNER_S
 
 @Service
 public class StepPlannerNode extends StepNodeSupport {
-    public StepPlannerNode(IChatClientArmory armory, WorkChatGateway chatGateway, WorkJsonParser parser) {
-        super(armory, chatGateway, parser);
+    public StepPlannerNode(IChatClientArmory armory, IMcpToolService mcpToolService, WorkChatGateway chatGateway, WorkJsonParser parser, RuntimeMessageBuilder messageBuilder) {
+        super(armory, mcpToolService, chatGateway, parser, messageBuilder);
     }
 
     public void execute(ExecuteRequestEntity request, ExecuteContext context, WorkEventSink sink) {
         try {
             AiFlowVO flow = flow(context, PLANNER);
             String inspectorResponse = context.getValue("inspector_response");
-            JsonNode result = parser.parseArray(call(flow, flow.getUserPrompt().formatted(request.getUserMessage(), inspectorResponse)));
+            JsonNode result = parser.parseArray(call(flow, flow.getUserPrompt().formatted(request.getUserMessage(), inspectorResponse), request));
             List<String> steps = new ArrayList<>();
             for (JsonNode item : result) {
                 String content = item.toString();

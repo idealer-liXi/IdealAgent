@@ -33,7 +33,7 @@ class AiControllerWorkExecuteTest {
         WorkService workService = mock(WorkService.class);
         Executor directExecutor = Runnable::run;
         AiController controller = new AiController(chatService, ragService, workService, directExecutor);
-        WorkRequestDTO request = new WorkRequestDTO("agent_default_step", "默认任务执行智能体", "执行任务", null, null, null, null);
+        WorkRequestDTO request = new WorkRequestDTO("agent_default_step", "默认任务执行智能体", "执行任务", null, null, null, null, null);
         UserContext.set(new AuthUserVO(7L, "admin", "admin"));
 
         SseEmitter emitter = controller.executeWork(request);

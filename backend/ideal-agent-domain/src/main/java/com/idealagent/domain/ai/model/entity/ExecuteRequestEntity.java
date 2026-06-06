@@ -1,12 +1,22 @@
 package com.idealagent.domain.ai.model.entity;
 
 public class ExecuteRequestEntity {
+    private Long userId;
     private String agentId;
     private String userMessage;
+    private String ragTag;
     private String sessionId;
     private Integer maxRound;
     private Integer maxRetry;
     private Integer maxPace;
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
 
     public String getAgentId() {
         return agentId;
@@ -22,6 +32,14 @@ public class ExecuteRequestEntity {
 
     public void setUserMessage(String userMessage) {
         this.userMessage = userMessage;
+    }
+
+    public String getRagTag() {
+        return ragTag;
+    }
+
+    public void setRagTag(String ragTag) {
+        this.ragTag = ragTag;
     }
 
     public String getSessionId() {

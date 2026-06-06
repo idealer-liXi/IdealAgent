@@ -43,6 +43,8 @@ class WorkServiceTest {
         assertThat(sessionRepository.sessions).hasSize(1);
         assertThat(sessionRepository.sessions.get(0).getType()).isEqualTo("work");
         assertThat(sessionRepository.messages).extracting(ChatMessage::getRole).containsExactly("user");
+        assertThat(dispatchService.lastRequest.getUserId()).isEqualTo(7L);
+        assertThat(dispatchService.lastRequest.getRagTag()).isEqualTo("work-docs");
         assertThat(dispatchService.lastRequest.getMaxRetry()).isEqualTo(2);
     }
 
@@ -96,7 +98,7 @@ class WorkServiceTest {
     }
 
     private WorkRequestDTO request(String sessionId, String message) {
-        return new WorkRequestDTO("agent_default_step", "默认任务执行智能体", message, sessionId, null, null, null);
+        return new WorkRequestDTO("agent_default_step", "默认任务执行智能体", message, "work-docs", sessionId, null, null, null);
     }
 
     private static class FakeSessionRepository implements ISessionRepository {

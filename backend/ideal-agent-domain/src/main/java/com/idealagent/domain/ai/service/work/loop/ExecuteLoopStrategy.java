@@ -6,6 +6,9 @@ import com.idealagent.domain.ai.model.entity.ExecuteResponseEntity;
 import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.repository.IWorkAgentRepository;
 import com.idealagent.domain.ai.service.armory.IChatClientArmory;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.augment.McpToolHandle;
+import com.idealagent.domain.ai.service.chat.RuntimeMessageBuilder;
 import com.idealagent.domain.ai.service.work.IExecuteStrategy;
 import com.idealagent.domain.ai.service.work.WorkChatGateway;
 import com.idealagent.domain.ai.service.work.WorkEventSink;
@@ -24,14 +27,18 @@ public class ExecuteLoopStrategy implements IExecuteStrategy {
 
     private final IWorkAgentRepository repository;
     private final IChatClientArmory armory;
+    private final IMcpToolService mcpToolService;
     private final WorkChatGateway chatGateway;
     private final WorkJsonParser parser;
+    private final RuntimeMessageBuilder messageBuilder;
 
-    public ExecuteLoopStrategy(IWorkAgentRepository repository, IChatClientArmory armory, WorkChatGateway chatGateway, WorkJsonParser parser) {
+    public ExecuteLoopStrategy(IWorkAgentRepository repository, IChatClientArmory armory, IMcpToolService mcpToolService, WorkChatGateway chatGateway, WorkJsonParser parser, RuntimeMessageBuilder messageBuilder) {
         this.repository = repository;
         this.armory = armory;
+        this.mcpToolService = mcpToolService;
         this.chatGateway = chatGateway;
         this.parser = parser;
+        this.messageBuilder = messageBuilder;
     }
 
     @Override
@@ -45,13 +52,13 @@ public class ExecuteLoopStrategy implements IExecuteStrategy {
         StringBuilder history = new StringBuilder();
 
         while (round <= maxRound && !completed) {
-            JsonNode analyzer = call(flows.get("analyzer"), format(flows.get("analyzer").getUserPrompt(), round, maxRound, request.getUserMessage(), currentTask, emptyHistory(history)), sink, "analyzer", request.getSessionId(), round, null);
+            JsonNode analyzer = call(flows.get("analyzer"), format(flows.get("analyzer").getUserPrompt(), round, maxRound, request.getUserMessage(), currentTask, emptyHistory(history)), sink, "analyzer", request, round, null);
             completed = isCompleted(text(analyzer, "analyzer_status")) || "100".equals(text(analyzer, "analyzer_progress"));
             if (completed) {
                 break;
             }
-            JsonNode performer = call(flows.get("performer"), format(flows.get("performer").getUserPrompt(), request.getUserMessage(), analyzer.toString()), sink, "performer", request.getSessionId(), round, null);
-            JsonNode supervisor = call(flows.get("supervisor"), format(flows.get("supervisor").getUserPrompt(), request.getUserMessage(), analyzer.toString(), performer.toString()), sink, "supervisor", request.getSessionId(), round, null);
+            JsonNode performer = call(flows.get("performer"), format(flows.get("performer").getUserPrompt(), request.getUserMessage(), analyzer.toString()), sink, "performer", request, round, null);
+            JsonNode supervisor = call(flows.get("supervisor"), format(flows.get("supervisor").getUserPrompt(), request.getUserMessage(), analyzer.toString(), performer.toString()), sink, "supervisor", request, round, null);
             String supervisorStatus = text(supervisor, "supervisor_status");
             completed = "PASS".equalsIgnoreCase(supervisorStatus);
             currentTask = "OPTIMIZE".equalsIgnoreCase(supervisorStatus) ? "根据任务监督专家的输出优化执行任务" : "根据任务监督专家的输出重新执行任务";
@@ -61,7 +68,7 @@ public class ExecuteLoopStrategy implements IExecuteStrategy {
                     .append("【任务监督专家】\n").append(supervisor).append('\n');
             round++;
         }
-        call(flows.get("summarizer"), format(flows.get("summarizer").getUserPrompt(), request.getUserMessage(), emptyHistory(history)), sink, "summarizer", request.getSessionId(), round, null);
+        call(flows.get("summarizer"), format(flows.get("summarizer").getUserPrompt(), request.getUserMessage(), emptyHistory(history)), sink, "summarizer", request, round, null);
         sink.complete(ExecuteResponseEntity.createCompleteResponse("执行完成", request.getSessionId()));
     }
 
@@ -70,14 +77,17 @@ public class ExecuteLoopStrategy implements IExecuteStrategy {
         return "loop";
     }
 
-    private JsonNode call(AiFlowVO flow, String prompt, WorkEventSink sink, String role, String sessionId, Integer round, Integer pace) {
+    private JsonNode call(AiFlowVO flow, String prompt, WorkEventSink sink, String role, ExecuteRequestEntity request, Integer round, Integer pace) {
         try {
             ChatClient client = armory.resolve(flow.getClientId());
-            JsonNode node = parser.parseObject(chatGateway.complete(client, prompt));
-            emitObject(node, sink, role, sessionId, round, pace);
+            JsonNode node;
+            try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
+                node = parser.parseObject(chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, request.getRagTag(), "work"), tools.toolCallbackProvider()));
+            }
+            emitObject(node, sink, role, request.getSessionId(), round, pace);
             return node;
         } catch (Exception e) {
-            ExecuteResponseEntity response = response(role, role + "_exception", e.getMessage() == null ? "执行异常" : e.getMessage(), sessionId, round, pace);
+            ExecuteResponseEntity response = response(role, role + "_exception", e.getMessage() == null ? "执行异常" : e.getMessage(), request.getSessionId(), round, pace);
             sink.message(response);
             return parser.parseObject("{\"" + role + "_exception\":\"" + escape(response.getSectionContent()) + "\"}");
         }

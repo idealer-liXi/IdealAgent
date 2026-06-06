@@ -5,10 +5,17 @@ import com.idealagent.domain.ai.model.entity.ExecuteResponseEntity;
 import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.repository.IWorkAgentRepository;
 import com.idealagent.domain.ai.service.armory.IChatClientArmory;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.augment.McpToolHandle;
+import com.idealagent.domain.ai.service.chat.RuntimeMessageBuilder;
 import com.idealagent.domain.ai.service.work.loop.ExecuteLoopStrategy;
 import com.idealagent.domain.ai.service.work.react.ExecuteReactStrategy;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallbackProvider;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -29,10 +36,17 @@ class MiniAgentParityStrategyTest {
         gateway.responses.add("{\"supervisor_status\":\"PASS\"}");
         gateway.responses.add("{\"summarizer_overview\":\"summary\"}");
         RecordingSink sink = new RecordingSink();
+        FakeMcpToolService mcpToolService = new FakeMcpToolService();
+        FakeMessageBuilder messageBuilder = new FakeMessageBuilder();
 
-        new ExecuteLoopStrategy(new FakeRepository(), new FakeArmory(), gateway, new WorkJsonParser()).execute(request("loop"), sink);
+        new ExecuteLoopStrategy(new FakeRepository(), new FakeArmory(), mcpToolService, gateway, new WorkJsonParser(), messageBuilder).execute(request("loop"), sink);
 
         assertThat(gateway.prompts).hasSize(4);
+        assertThat(messageBuilder.ragTags).containsExactly("agent-docs", "agent-docs", "agent-docs", "agent-docs");
+        assertThat(mcpToolService.clientIds).containsExactly("client_analyzer", "client_performer", "client_supervisor", "client_summarizer");
+        assertThat(mcpToolService.userIds).containsExactly(7L, 7L, 7L, 7L);
+        assertThat(mcpToolService.closedCount).isEqualTo(4);
+        assertThat(gateway.toolCallbackProviders).hasSize(4);
         assertThat(sink.messages).extracting(ExecuteResponseEntity::getClientType)
                 .contains("analyzer", "performer", "supervisor", "summarizer");
         assertThat(sink.completed).isTrue();
@@ -47,20 +61,53 @@ class MiniAgentParityStrategyTest {
         gateway.responses.add("{\"observer_status\":\"COMPLETED\"}");
         gateway.responses.add("{\"evaluator_overview\":\"ok\"}");
         RecordingSink sink = new RecordingSink();
+        FakeMcpToolService mcpToolService = new FakeMcpToolService();
+        FakeMessageBuilder messageBuilder = new FakeMessageBuilder();
 
-        new ExecuteReactStrategy(new FakeRepository(), new FakeArmory(), gateway, new WorkJsonParser()).execute(request("react"), sink);
+        new ExecuteReactStrategy(new FakeRepository(), new FakeArmory(), mcpToolService, gateway, new WorkJsonParser(), messageBuilder).execute(request("react"), sink);
 
         assertThat(gateway.prompts).hasSize(5);
+        assertThat(messageBuilder.ragTags).containsExactly("agent-docs", "agent-docs", "agent-docs", "agent-docs", "agent-docs");
+        assertThat(mcpToolService.clientIds).containsExactly("client_observer", "client_reasoner", "client_actor", "client_observer", "client_evaluator");
+        assertThat(mcpToolService.closedCount).isEqualTo(5);
+        assertThat(gateway.toolCallbackProviders).hasSize(5);
         assertThat(sink.messages).extracting(ExecuteResponseEntity::getClientType)
                 .contains("observer", "reasoner", "actor", "evaluator");
         assertThat(sink.completed).isTrue();
     }
 
+    @Test
+    void reactStrategyPreservesMiniAgentPaceZeroThroughMaxPaceBehavior() {
+        FakeGateway gateway = new FakeGateway();
+        gateway.responses.add("{\"observer_status\":\"RUNNING\"}");
+        gateway.responses.add("{\"reasoner_action\":\"first\"}");
+        gateway.responses.add("{\"actor_result\":\"first done\"}");
+        gateway.responses.add("{\"observer_status\":\"RUNNING\"}");
+        gateway.responses.add("{\"reasoner_action\":\"second\"}");
+        gateway.responses.add("{\"actor_result\":\"second done\"}");
+        gateway.responses.add("{\"evaluator_overview\":\"ok\"}");
+        RecordingSink sink = new RecordingSink();
+        FakeMcpToolService mcpToolService = new FakeMcpToolService();
+        FakeMessageBuilder messageBuilder = new FakeMessageBuilder();
+
+        new ExecuteReactStrategy(new FakeRepository(), new FakeArmory(), mcpToolService, gateway, new WorkJsonParser(), messageBuilder).execute(request("react"), sink);
+
+        assertThat(gateway.prompts).hasSize(7);
+        assertThat(mcpToolService.clientIds).containsExactly(
+                "client_observer", "client_reasoner", "client_actor",
+                "client_observer", "client_reasoner", "client_actor",
+                "client_evaluator");
+        assertThat(sink.messages).extracting(ExecuteResponseEntity::getPace).contains(0, 1, 2);
+        assertThat(sink.completed).isTrue();
+    }
+
     private ExecuteRequestEntity request(String type) {
         ExecuteRequestEntity request = new ExecuteRequestEntity();
+        request.setUserId(7L);
         request.setAgentId("agent_" + type);
         request.setSessionId("session_work");
         request.setUserMessage("执行任务");
+        request.setRagTag("agent-docs");
         request.setMaxRound(2);
         request.setMaxPace(1);
         request.setMaxRetry(2);
@@ -93,9 +140,49 @@ class MiniAgentParityStrategyTest {
     private static class FakeGateway extends WorkChatGateway {
         private final Queue<String> responses = new ArrayDeque<>();
         private final List<String> prompts = new ArrayList<>();
-        @Override public String complete(ChatClient client, String prompt) {
+        private final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
+        @Override public String complete(ChatClient client, String prompt, ToolCallbackProvider toolCallbackProvider) {
             prompts.add(prompt);
+            toolCallbackProviders.add(toolCallbackProvider);
             return responses.remove();
+        }
+
+        @Override public String complete(ChatClient client, List<Message> messages, ToolCallbackProvider toolCallbackProvider) {
+            prompts.add(messages.get(messages.size() - 1).getText());
+            toolCallbackProviders.add(toolCallbackProvider);
+            return responses.remove();
+        }
+    }
+
+    private static class FakeMessageBuilder extends RuntimeMessageBuilder {
+        private final List<String> ragTags = new ArrayList<>();
+
+        FakeMessageBuilder() {
+            super(null, null, null);
+        }
+
+        @Override
+        public List<Message> build(Long userId, String sessionId, String clientId, String content, String ragTag, String messageType) {
+            ragTags.add(ragTag);
+            return List.of(new UserMessage(content));
+        }
+    }
+
+    private static class FakeMcpToolService implements IMcpToolService {
+        private final List<Long> userIds = new ArrayList<>();
+        private final List<String> clientIds = new ArrayList<>();
+        private int closedCount;
+
+        @Override
+        public McpToolHandle augmentMcpTool(Long userId, String clientId) {
+            userIds.add(userId);
+            clientIds.add(clientId);
+            return new McpToolHandle(new SyncMcpToolCallbackProvider(), List.of()) {
+                @Override
+                public void close() {
+                    closedCount++;
+                }
+            };
         }
     }
 

@@ -1,7 +1,6 @@
 package com.idealagent.domain.ai.service.chat;
 
 import com.idealagent.domain.ai.model.dto.ChatRequestDTO;
-import com.idealagent.domain.ai.service.augment.IAugmentService;
 import com.idealagent.domain.ai.service.augment.IMcpToolService;
 import com.idealagent.domain.ai.service.augment.McpToolHandle;
 import com.idealagent.domain.ai.service.dispatch.IChatDispatchService;
@@ -37,22 +36,22 @@ public class ChatService {
     private final ISessionRepository chatRepository;
     private final IAiConfigRepository aiConfigRepository;
     private final IChatDispatchService chatDispatchService;
-    private final IAugmentService augmentService;
     private final IMcpToolService mcpToolService;
     private final SpringAiChatGateway chatGateway;
+    private final RuntimeMessageBuilder messageBuilder;
 
     public ChatService(ISessionRepository chatRepository,
                        IAiConfigRepository aiConfigRepository,
                        IChatDispatchService chatDispatchService,
-                       IAugmentService augmentService,
                        IMcpToolService mcpToolService,
-                       SpringAiChatGateway chatGateway) {
+                       SpringAiChatGateway chatGateway,
+                       RuntimeMessageBuilder messageBuilder) {
         this.chatRepository = chatRepository;
         this.aiConfigRepository = aiConfigRepository;
         this.chatDispatchService = chatDispatchService;
-        this.augmentService = augmentService;
         this.mcpToolService = mcpToolService;
         this.chatGateway = chatGateway;
+        this.messageBuilder = messageBuilder;
     }
 
     public ChatResponseVO send(Long userId, ChatRequestDTO request) {
@@ -61,11 +60,12 @@ public class ChatService {
         String clientId = StringUtils.hasText(request.clientId()) ? request.clientId() : LOCAL_ECHO_CLIENT;
         ensureSession(userId, sessionId, request);
 
+        List<Message> messages = messageBuilder.build(userId, sessionId, clientId, request.content(), request.ragTag(), CHAT_TYPE);
+
         ChatMessage userMessage = message(sessionId, USER_ROLE, request.content());
         chatRepository.saveMessage(userMessage);
 
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
-        List<Message> messages = augmentService.augmentRagMessage(userId, request.content(), request.ragTag());
         try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
             String assistantContent = chatGateway.complete(runtimeClient, messages, mcpTools.toolCallbackProvider());
             ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent));
@@ -79,11 +79,12 @@ public class ChatService {
         String clientId = StringUtils.hasText(request.clientId()) ? request.clientId() : LOCAL_ECHO_CLIENT;
         ensureSession(userId, sessionId, request);
 
+        List<Message> messages = messageBuilder.build(userId, sessionId, clientId, request.content(), request.ragTag(), CHAT_TYPE);
+
         ChatMessage userMessage = message(sessionId, USER_ROLE, request.content());
         chatRepository.saveMessage(userMessage);
 
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
-        List<Message> messages = augmentService.augmentRagMessage(userId, request.content(), request.ragTag());
         StringBuilder assistantContent = new StringBuilder();
         try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
             chatGateway.stream(runtimeClient, messages, mcpTools.toolCallbackProvider(), delta -> {
@@ -101,6 +102,9 @@ public class ChatService {
     }
 
     public List<ChatMessageVO> listMessages(Long userId, String sessionId) {
+        if (chatRepository.findSession(sessionId, userId, CHAT_TYPE).isEmpty()) {
+            throw new ChatException("会话不存在");
+        }
         return chatRepository.listMessages(sessionId, userId).stream().map(this::toMessageVo).toList();
     }
 
@@ -131,6 +135,10 @@ public class ChatService {
         session.setUserId(userId);
         session.setTargetId(StringUtils.hasText(request.clientId()) ? request.clientId() : LOCAL_ECHO_CLIENT);
         chatRepository.saveSession(session);
+    }
+
+    private boolean enabled(AiConfigRecord record) {
+        return record != null && record.getStatus() != null && record.getStatus() == ENABLED;
     }
 
     private ChatMessage message(String sessionId, String role, String content) {

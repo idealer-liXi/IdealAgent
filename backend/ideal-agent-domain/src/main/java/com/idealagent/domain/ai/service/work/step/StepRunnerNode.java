@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.idealagent.domain.ai.model.entity.ExecuteRequestEntity;
 import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.service.armory.IChatClientArmory;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.chat.RuntimeMessageBuilder;
 import com.idealagent.domain.ai.service.work.ExecuteContext;
 import com.idealagent.domain.ai.service.work.WorkChatGateway;
 import com.idealagent.domain.ai.service.work.WorkEventSink;
@@ -19,8 +21,8 @@ import static com.idealagent.domain.ai.service.work.step.StepConstants.RUNNER_ST
 
 @Service
 public class StepRunnerNode extends StepNodeSupport {
-    public StepRunnerNode(IChatClientArmory armory, WorkChatGateway chatGateway, WorkJsonParser parser) {
-        super(armory, chatGateway, parser);
+    public StepRunnerNode(IChatClientArmory armory, IMcpToolService mcpToolService, WorkChatGateway chatGateway, WorkJsonParser parser, RuntimeMessageBuilder messageBuilder) {
+        super(armory, mcpToolService, chatGateway, parser, messageBuilder);
     }
 
     public void execute(ExecuteRequestEntity request, ExecuteContext context, WorkEventSink sink) {
@@ -41,7 +43,7 @@ public class StepRunnerNode extends StepNodeSupport {
         for (int attempt = 1; attempt <= maxRetry; attempt++) {
             try {
                 String prompt = flow.getUserPrompt().formatted(request.getUserMessage(), inspectorResponse, plannerStep);
-                JsonNode result = parser.parseObject(call(flow, prompt));
+                JsonNode result = parser.parseObject(call(flow, prompt, request));
                 String status = text(result, RUNNER_STATUS);
                 String runnerResult = text(result, RUNNER_RESULT);
                 if ("FAIL".equalsIgnoreCase(status)) {

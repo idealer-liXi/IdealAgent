@@ -6,4 +6,8 @@ import java.util.List;
 
 public interface IAugmentService {
     List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag);
+
+    List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK);
+
+    List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK, String filterExpression);
 }

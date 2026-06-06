@@ -62,8 +62,10 @@ public class WorkService {
         sessionRepository.saveMessage(message(sessionId, USER_ROLE, request.userMessage()));
 
         ExecuteRequestEntity executeRequest = new ExecuteRequestEntity();
+        executeRequest.setUserId(userId);
         executeRequest.setAgentId(agent.getAgentId());
         executeRequest.setUserMessage(request.userMessage());
+        executeRequest.setRagTag(request.ragTag());
         executeRequest.setSessionId(sessionId);
         executeRequest.setMaxRound(request.maxRound());
         executeRequest.setMaxRetry(safeRetry(request.maxRetry()));

@@ -6,6 +6,9 @@ import com.idealagent.domain.ai.model.entity.ExecuteResponseEntity;
 import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.repository.IWorkAgentRepository;
 import com.idealagent.domain.ai.service.armory.IChatClientArmory;
+import com.idealagent.domain.ai.service.augment.IMcpToolService;
+import com.idealagent.domain.ai.service.augment.McpToolHandle;
+import com.idealagent.domain.ai.service.chat.RuntimeMessageBuilder;
 import com.idealagent.domain.ai.service.work.IExecuteStrategy;
 import com.idealagent.domain.ai.service.work.WorkChatGateway;
 import com.idealagent.domain.ai.service.work.WorkEventSink;
@@ -24,14 +27,18 @@ public class ExecuteReactStrategy implements IExecuteStrategy {
 
     private final IWorkAgentRepository repository;
     private final IChatClientArmory armory;
+    private final IMcpToolService mcpToolService;
     private final WorkChatGateway chatGateway;
     private final WorkJsonParser parser;
+    private final RuntimeMessageBuilder messageBuilder;
 
-    public ExecuteReactStrategy(IWorkAgentRepository repository, IChatClientArmory armory, WorkChatGateway chatGateway, WorkJsonParser parser) {
+    public ExecuteReactStrategy(IWorkAgentRepository repository, IChatClientArmory armory, IMcpToolService mcpToolService, WorkChatGateway chatGateway, WorkJsonParser parser, RuntimeMessageBuilder messageBuilder) {
         this.repository = repository;
         this.armory = armory;
+        this.mcpToolService = mcpToolService;
         this.chatGateway = chatGateway;
         this.parser = parser;
+        this.messageBuilder = messageBuilder;
     }
 
     @Override
@@ -45,14 +52,14 @@ public class ExecuteReactStrategy implements IExecuteStrategy {
         StringBuilder history = new StringBuilder();
 
         while (pace <= maxPace && !completed) {
-            JsonNode observer = call(flows.get("observer"), format(flows.get("observer").getUserPrompt(), pace, maxPace, request.getUserMessage(), currentTask, emptyHistory(history)), sink, "observer", request.getSessionId(), pace);
+            JsonNode observer = call(flows.get("observer"), format(flows.get("observer").getUserPrompt(), pace, maxPace, request.getUserMessage(), currentTask, emptyHistory(history)), sink, "observer", request, pace);
             completed = isCompleted(text(observer, "observer_status"));
             if (completed) {
                 break;
             }
-            JsonNode reasoner = call(flows.get("reasoner"), format(flows.get("reasoner").getUserPrompt(), request.getUserMessage(), observer.toString(), emptyHistory(history)), sink, "reasoner", request.getSessionId(), pace);
+            JsonNode reasoner = call(flows.get("reasoner"), format(flows.get("reasoner").getUserPrompt(), request.getUserMessage(), observer.toString(), emptyHistory(history)), sink, "reasoner", request, pace);
             currentTask = text(reasoner, "reasoner_action") == null ? reasoner.toString() : text(reasoner, "reasoner_action");
-            JsonNode actor = call(flows.get("actor"), format(flows.get("actor").getUserPrompt(), request.getUserMessage(), observer.toString(), reasoner.toString()), sink, "actor", request.getSessionId(), pace);
+            JsonNode actor = call(flows.get("actor"), format(flows.get("actor").getUserPrompt(), request.getUserMessage(), observer.toString(), reasoner.toString()), sink, "actor", request, pace);
             history.append("=== 第 ").append(pace).append(" 轮执行记录 ===\n")
                     .append("【任务观察专家】\n").append(observer).append('\n')
                     .append("【任务推理专家】\n").append(reasoner).append('\n')
@@ -60,7 +67,7 @@ public class ExecuteReactStrategy implements IExecuteStrategy {
             currentTask = text(actor, "actor_result") == null ? actor.toString() : text(actor, "actor_result");
             pace++;
         }
-        call(flows.get("evaluator"), format(flows.get("evaluator").getUserPrompt(), request.getUserMessage(), emptyHistory(history)), sink, "evaluator", request.getSessionId(), pace);
+        call(flows.get("evaluator"), format(flows.get("evaluator").getUserPrompt(), request.getUserMessage(), emptyHistory(history)), sink, "evaluator", request, pace);
         sink.complete(ExecuteResponseEntity.createCompleteResponse("执行完成", request.getSessionId()));
     }
 
@@ -69,14 +76,17 @@ public class ExecuteReactStrategy implements IExecuteStrategy {
         return "react";
     }
 
-    private JsonNode call(AiFlowVO flow, String prompt, WorkEventSink sink, String role, String sessionId, Integer pace) {
+    private JsonNode call(AiFlowVO flow, String prompt, WorkEventSink sink, String role, ExecuteRequestEntity request, Integer pace) {
         try {
             ChatClient client = armory.resolve(flow.getClientId());
-            JsonNode node = parser.parseObject(chatGateway.complete(client, prompt));
-            node.fields().forEachRemaining(entry -> sink.message(response(role, entry.getKey(), entry.getValue().asText(), sessionId, pace)));
+            JsonNode node;
+            try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
+                node = parser.parseObject(chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, request.getRagTag(), "work"), tools.toolCallbackProvider()));
+            }
+            node.fields().forEachRemaining(entry -> sink.message(response(role, entry.getKey(), entry.getValue().asText(), request.getSessionId(), pace)));
             return node;
         } catch (Exception e) {
-            ExecuteResponseEntity response = response(role, role + "_exception", e.getMessage() == null ? "执行异常" : e.getMessage(), sessionId, pace);
+            ExecuteResponseEntity response = response(role, role + "_exception", e.getMessage() == null ? "执行异常" : e.getMessage(), request.getSessionId(), pace);
             sink.message(response);
             return parser.parseObject("{\"" + role + "_exception\":\"" + escape(response.getSectionContent()) + "\"}");
         }

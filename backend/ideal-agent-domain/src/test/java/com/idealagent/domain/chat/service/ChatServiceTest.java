@@ -16,13 +16,17 @@ import com.idealagent.domain.session.repository.ISessionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
 import org.springframework.ai.tool.ToolCallbackProvider;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -47,7 +51,8 @@ class ChatServiceTest {
         augmentService = new RecordingAugmentService();
         mcpToolService = new RecordingMcpToolService();
         chatGateway = new RecordingChatGateway();
-        chatService = new ChatService(repository, configRepository, dispatchService, augmentService, mcpToolService, chatGateway);
+        RuntimeMessageBuilder messageBuilder = new RuntimeMessageBuilder(repository, configRepository, augmentService);
+        chatService = new ChatService(repository, configRepository, dispatchService, mcpToolService, chatGateway, messageBuilder);
     }
 
     @Test
@@ -78,6 +83,73 @@ class ChatServiceTest {
     }
 
     @Test
+    void sendIncludesSameSessionHistoryInModelMessages() {
+        ChatSession session = session("session_existing", 7L, "client_default_chat");
+        repository.saveSession(session);
+        repository.saveMessage(message("session_existing", "user", "我叫张三"));
+        repository.saveMessage(message("session_existing", "assistant", "你好，张三"));
+
+        chatService.send(7L, new ChatRequestDTO("session_existing", "client_default_chat", "我叫什么？"));
+
+        assertThat(chatGateway.lastMessages).extracting(Message::getText)
+                .containsExactly("我叫张三", "你好，张三", "我叫什么？");
+        assertThat(chatGateway.lastMessages.get(0)).isInstanceOf(UserMessage.class);
+        assertThat(chatGateway.lastMessages.get(1)).isInstanceOf(AssistantMessage.class);
+        assertThat(chatGateway.lastMessages.get(2)).isInstanceOf(UserMessage.class);
+    }
+
+    @Test
+    void sendLeavesClientPromptOutOfRequestMessages() {
+        configRepository.add(ConfigKind.CONFIG, configBinding("config_prompt", "client_default_chat", "prompt", "prompt_system", 1));
+        configRepository.add(ConfigKind.PROMPT, promptRecord("prompt_system", "你是 IdealAgent，请用中文回答。", 1));
+
+        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "你好"));
+
+        assertThat(chatGateway.lastMessages).extracting(Message::getText)
+                .containsExactly("你好");
+        assertThat(chatGateway.lastMessages.get(0)).isInstanceOf(UserMessage.class);
+    }
+
+    @Test
+    void sendUsesMiniAgentMemoryAdvisorMaxMessagesToLimitHistoryWindow() {
+        configRepository.add(ConfigKind.CONFIG, configBinding("config_memory", "client_default_chat", "advisor", "advisor_memory", 1));
+        configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_memory", "Memory", "{\"maxMessages\":3}", 1));
+        repository.saveSession(session("session_memory", 7L, "client_default_chat"));
+        repository.saveMessage(message("session_memory", "user", "u1"));
+        repository.saveMessage(message("session_memory", "assistant", "a1"));
+        repository.saveMessage(message("session_memory", "user", "u2"));
+        repository.saveMessage(message("session_memory", "assistant", "a2"));
+
+        chatService.send(7L, new ChatRequestDTO("session_memory", "client_default_chat", "u3"));
+
+        assertThat(chatGateway.lastMessages).extracting(Message::getText)
+                .containsExactly("a1", "u2", "a2", "u3");
+    }
+
+    @Test
+    void sendDoesNotUseRagAdvisorTagWhenRequestHasNoRagTag() {
+        configRepository.add(ConfigKind.CONFIG, configBinding("config_rag", "client_default_chat", "advisor", "advisor_rag", 1));
+        configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_rag", "Rag", "{\"ragTag\":\"project-docs\",\"topK\":4}", 1));
+
+        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "介绍项目"));
+
+        assertThat(augmentService.lastRagTag).isNull();
+        assertThat(augmentService.lastTopK).isNull();
+    }
+
+    @Test
+    void sendAppliesRagAdvisorTopKWhenRequestHasRagTag() {
+        configRepository.add(ConfigKind.CONFIG, configBinding("config_rag", "client_default_chat", "advisor", "advisor_rag", 1));
+        configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_rag", "Rag", "{\"topK\":4,\"filterExpression\":\"source == 'note.md'\"}", 1));
+
+        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "介绍项目", "request-docs"));
+
+        assertThat(augmentService.lastRagTag).isEqualTo("request-docs");
+        assertThat(augmentService.lastTopK).isEqualTo(4);
+        assertThat(augmentService.lastFilterExpression).isEqualTo("source == 'note.md'");
+    }
+
+    @Test
     void streamEmitsDeltasAndPersistsFullAssistantMessage() {
         chatGateway.streamDeltas = List.of("你", "好");
         List<String> deltas = new ArrayList<>();
@@ -99,8 +171,8 @@ class ChatServiceTest {
 
     @Test
     void listClientsReturnsEnabledClientOptions() {
-        configRepository.records.add(clientRecord("client_default_chat", "Default Chat", "chat", "model_default_chat", "gpt-4o-mini", 1));
-        configRepository.records.add(clientRecord("client_disabled", "Disabled", "chat", "model_disabled", "gpt-disabled", 0));
+        configRepository.add(ConfigKind.CLIENT, clientRecord("client_default_chat", "Default Chat", "chat", "model_default_chat", "gpt-4o-mini", 1));
+        configRepository.add(ConfigKind.CLIENT, clientRecord("client_disabled", "Disabled", "chat", "model_disabled", "gpt-disabled", 0));
 
         List<ChatClientOptionVO> clients = chatService.listClients();
 
@@ -109,6 +181,16 @@ class ChatServiceTest {
         assertThat(clients.get(0).clientName()).isEqualTo("Default Chat");
         assertThat(clients.get(0).modelId()).isEqualTo("model_default_chat");
         assertThat(clients.get(0).modelName()).isEqualTo("gpt-4o-mini");
+    }
+
+    @Test
+    void listMessagesRejectsSessionOwnedByAnotherUser() {
+        repository.saveSession(session("session_private", 7L, "client_default_chat"));
+        repository.saveMessage(message("session_private", "user", "secret"));
+
+        assertThatThrownBy(() -> chatService.listMessages(8L, "session_private"))
+                .isInstanceOf(ChatException.class)
+                .hasMessage("会话不存在");
     }
 
     private AiConfigRecord clientRecord(String clientId, String name, String type, String modelId, String modelName, Integer status) {
@@ -120,6 +202,57 @@ class ChatServiceTest {
         record.setSecret(modelName);
         record.setStatus(status);
         return record;
+    }
+
+    private AiConfigRecord configBinding(String id, String clientId, String configType, String refId, Integer status) {
+        AiConfigRecord record = new AiConfigRecord();
+        record.setConfigId(id);
+        record.setOwnerType("client");
+        record.setContent(clientId);
+        record.setConfigType(configType);
+        record.setRefId(refId);
+        record.setStatus(status);
+        return record;
+    }
+
+    private AiConfigRecord promptRecord(String promptId, String content, Integer status) {
+        AiConfigRecord record = new AiConfigRecord();
+        record.setConfigId(promptId);
+        record.setName(promptId);
+        record.setType("system");
+        record.setContent(content);
+        record.setStatus(status);
+        return record;
+    }
+
+    private AiConfigRecord advisorRecord(String advisorId, String type, String content, Integer status) {
+        AiConfigRecord record = new AiConfigRecord();
+        record.setConfigId(advisorId);
+        record.setName(advisorId);
+        record.setType(type);
+        record.setContent(content);
+        record.setStatus(status);
+        return record;
+    }
+
+    private ChatSession session(String sessionId, Long userId, String targetId) {
+        ChatSession session = new ChatSession();
+        session.setSessionId(sessionId);
+        session.setType("chat");
+        session.setTitle("test");
+        session.setUserId(userId);
+        session.setTargetId(targetId);
+        return session;
+    }
+
+    private ChatMessage message(String sessionId, String role, String content) {
+        ChatMessage message = new ChatMessage();
+        message.setMessageId("msg_" + repository.messages.size());
+        message.setSessionId(sessionId);
+        message.setType("chat");
+        message.setRole(role);
+        message.setContent(content);
+        return message;
     }
 
     private static class FakeChatRepository implements ISessionRepository {
@@ -169,17 +302,21 @@ class ChatServiceTest {
     }
 
     private static class FakeAiConfigRepository implements IAiConfigRepository {
-        private final List<AiConfigRecord> records = new ArrayList<>();
+        private final Map<ConfigKind, List<AiConfigRecord>> records = new EnumMap<>(ConfigKind.class);
+
+        void add(ConfigKind kind, AiConfigRecord record) {
+            records.computeIfAbsent(kind, ignored -> new ArrayList<>()).add(record);
+        }
 
         @Override
         public AiConfigRecord save(ConfigKind kind, AiConfigRecord record) {
-            records.add(record);
+            add(kind, record);
             return record;
         }
 
         @Override
         public List<AiConfigRecord> list(ConfigKind kind) {
-            return kind == ConfigKind.CLIENT ? records : List.of();
+            return records.getOrDefault(kind, List.of());
         }
 
         @Override
@@ -211,12 +348,26 @@ class ChatServiceTest {
         private Long lastUserId;
         private String lastUserMessage;
         private String lastRagTag;
+        private Integer lastTopK;
+        private String lastFilterExpression;
 
         @Override
         public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag) {
+            return augmentRagMessage(userId, userMessage, ragTag, null, null);
+        }
+
+        @Override
+        public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK) {
+            return augmentRagMessage(userId, userMessage, ragTag, topK, null);
+        }
+
+        @Override
+        public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK, String filterExpression) {
             lastUserId = userId;
             lastUserMessage = userMessage;
             lastRagTag = ragTag;
+            lastTopK = topK;
+            lastFilterExpression = filterExpression;
             return List.of(new UserMessage(userMessage));
         }
     }

@@ -9,7 +9,9 @@ import UiButton from './ui/UiButton.vue'
 const overviewTypes = new Set(['summarizer_overview', 'replier_overview', 'evaluator_overview'])
 
 const agents = ref([])
+const ragTags = ref([])
 const agentId = ref('')
+const selectedRagTag = ref('')
 const content = ref('')
 const cards = ref([])
 const messages = ref([])
@@ -26,7 +28,10 @@ const processListRef = ref(null)
 const selectedAgent = computed(() => agents.value.find(item => item.agentId === agentId.value) || null)
 const canSend = computed(() => Boolean(agentId.value && content.value.trim() && !loading.value))
 
-onMounted(loadAgents)
+onMounted(() => {
+  loadAgents()
+  loadRagTags()
+})
 
 watch(cards, scrollProcessToBottom, { deep: true })
 watch(messages, scrollProcessToBottom, { deep: true })
@@ -41,6 +46,18 @@ async function loadAgents() {
     }
   } catch (e) {
     agentError.value = e.response?.data?.message || 'Work Agent 列表加载失败'
+  }
+}
+
+async function loadRagTags() {
+  try {
+    const response = await request.get('/ai/rag/tags')
+    ragTags.value = response.data.data || []
+    if (selectedRagTag.value && !ragTags.value.some(tag => tag.ragTag === selectedRagTag.value)) {
+      selectedRagTag.value = ''
+    }
+  } catch (e) {
+    ragTags.value = []
   }
 }
 
@@ -100,6 +117,7 @@ async function send() {
         agentId: agentId.value,
         agentDesc: selectedAgentDesc(),
         userMessage,
+        ragTag: selectedRagTag.value || null,
         sessionId: sessionId.value || null,
         maxRetry: clampNumber(maxRetry.value, 1, 5, 2),
         maxRound: clampNumber(maxRound.value, 1, 5, 2),
@@ -262,6 +280,21 @@ function cardMeta(card) {
                     {{ selectedAgent.agentDesc || '暂无描述' }}
                   </p>
                 </div>
+
+                <label class="mt-4 block">
+                  <span class="mb-2 block text-sm font-semibold text-text-secondary">RAG 知识库</span>
+                  <select
+                    v-model="selectedRagTag"
+                    class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
+                    :disabled="loading"
+                  >
+                    <option value="">不使用知识库</option>
+                    <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">
+                      {{ tag.ragTag }}
+                    </option>
+                  </select>
+                  <p class="mt-2 text-xs text-text-tertiary">RAG Advisor 只控制检索参数；这里决定本次 Agent 是否使用哪个知识库。</p>
+                </label>
 
                 <p v-if="agentError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ agentError }}</p>
                 <p v-else-if="agents.length === 0" class="mt-3 rounded-card border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">

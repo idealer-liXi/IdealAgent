@@ -69,6 +69,21 @@ class RagServiceTest {
     }
 
     @Test
+    void retrieveUsesConfiguredTopKWhenProvided() {
+        service.retrieve(7L, "spring-ai", "How to store vectors?", 8);
+
+        assertThat(vectorStore.searchRequest.getTopK()).isEqualTo(8);
+    }
+
+    @Test
+    void retrieveCombinesConfiguredFilterExpressionWithKnowledgeAndUserFilter() {
+        service.retrieve(7L, "spring-ai", "How to store vectors?", 4, "source == 'note.md'");
+
+        assertThat(vectorStore.searchRequest.getFilterExpression().toString())
+                .contains("knowledge", "spring-ai", "userId", "7", "source", "note.md");
+    }
+
+    @Test
     void uploadRejectsBlankTag() {
         assertThatThrownBy(() -> service.uploadFiles(7L, " ", List.of(new RagFile("note.md", "text"))))
                 .isInstanceOf(RagException.class)

@@ -45,4 +45,28 @@ class AugmentServiceTest {
         assertThat(messages.get(1).getText()).isEqualTo("How?");
         verify(ragService).retrieve(7L, "spring-ai", "How?");
     }
+
+    @Test
+    void augmentRagMessageUsesConfiguredTopKWhenProvided() {
+        when(ragService.retrieve(7L, "spring-ai", "How?", 4))
+                .thenReturn(List.of(new RagChunk("top k context", "note.md", new float[0])));
+
+        List<Message> messages = service.augmentRagMessage(7L, "How?", "spring-ai", 4);
+
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).getText()).contains("top k context");
+        verify(ragService).retrieve(7L, "spring-ai", "How?", 4);
+    }
+
+    @Test
+    void augmentRagMessagePassesFilterExpressionWhenProvided() {
+        when(ragService.retrieve(7L, "spring-ai", "How?", 4, "source == 'note.md'"))
+                .thenReturn(List.of(new RagChunk("filtered context", "note.md", new float[0])));
+
+        List<Message> messages = service.augmentRagMessage(7L, "How?", "spring-ai", 4, "source == 'note.md'");
+
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(0).getText()).contains("filtered context");
+        verify(ragService).retrieve(7L, "spring-ai", "How?", 4, "source == 'note.md'");
+    }
 }

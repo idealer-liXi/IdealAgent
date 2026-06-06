@@ -34,10 +34,27 @@ public class AugmentService implements IAugmentService {
 
     @Override
     public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag) {
+        return augmentRagMessage(userId, userMessage, ragTag, null);
+    }
+
+    @Override
+    public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK) {
+        return augmentRagMessage(userId, userMessage, ragTag, topK, null);
+    }
+
+    @Override
+    public List<Message> augmentRagMessage(Long userId, String userMessage, String ragTag, Integer topK, String filterExpression) {
         if (!StringUtils.hasText(ragTag)) {
             return List.of(new UserMessage(userMessage));
         }
-        List<RagChunk> chunks = ragService.retrieve(userId, ragTag, userMessage);
+        List<RagChunk> chunks;
+        if (StringUtils.hasText(filterExpression)) {
+            chunks = ragService.retrieve(userId, ragTag, userMessage, topK, filterExpression);
+        } else if (topK != null) {
+            chunks = ragService.retrieve(userId, ragTag, userMessage, topK);
+        } else {
+            chunks = ragService.retrieve(userId, ragTag, userMessage);
+        }
         String documents = chunks.stream()
                 .map(RagChunk::content)
                 .collect(Collectors.joining("\n"));

@@ -56,6 +56,16 @@ class ChatClientArmoryTest {
                 .hasMessage("Model 未绑定 API");
     }
 
+    @Test
+    void systemPromptForClientConcatenatesEnabledPromptBindings() {
+        repository.records.add(binding("config_prompt_1", "client_default", "prompt", "prompt_one", 1));
+        repository.records.add(binding("config_prompt_2", "client_default", "prompt", "prompt_two", 1));
+        repository.records.add(record(ConfigKind.PROMPT, "prompt_one", "Prompt One", "你是助手。", null, null, 1));
+        repository.records.add(record(ConfigKind.PROMPT, "prompt_two", "Prompt Two", "用中文回答。", null, null, 1));
+
+        assertThat(armory.systemPromptForClient("client_default")).isEqualTo("你是助手。用中文回答。");
+    }
+
     private AiConfigRecord record(ConfigKind kind, String id, String name, String content, String secret, String refId, Integer status) {
         AiConfigRecord record = new AiConfigRecord();
         record.setConfigId(id);
@@ -65,6 +75,18 @@ class ChatClientArmoryTest {
         record.setRefId(refId);
         record.setStatus(status);
         record.setType(kind.name());
+        return record;
+    }
+
+    private AiConfigRecord binding(String id, String clientId, String configType, String refId, Integer status) {
+        AiConfigRecord record = new AiConfigRecord();
+        record.setConfigId(id);
+        record.setType(ConfigKind.CONFIG.name());
+        record.setOwnerType("client");
+        record.setContent(clientId);
+        record.setConfigType(configType);
+        record.setRefId(refId);
+        record.setStatus(status);
         return record;
     }
 

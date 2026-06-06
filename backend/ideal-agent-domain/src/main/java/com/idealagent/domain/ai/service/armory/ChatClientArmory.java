@@ -63,15 +63,34 @@ public class ChatClientArmory implements IChatClientArmory {
                 .defaultOptions(OpenAiChatOptions.builder().model(model.getName()).build())
                 .build();
         return ChatClient.builder(chatModel)
-                .defaultSystem(DEFAULT_SYSTEM)
+                .defaultSystem(systemPromptForClient(clientId))
                 .build();
+    }
+
+    String systemPromptForClient(String clientId) {
+        String system = aiConfigRepository.list(ConfigKind.CONFIG).stream()
+                .filter(this::enabled)
+                .filter(record -> "client".equals(record.getOwnerType()))
+                .filter(record -> clientId.equals(record.getContent()))
+                .filter(record -> "prompt".equals(record.getConfigType()))
+                .filter(record -> StringUtils.hasText(record.getRefId()))
+                .map(binding -> aiConfigRepository.find(ConfigKind.PROMPT, binding.getRefId()))
+                .filter(this::enabled)
+                .map(AiConfigRecord::getContent)
+                .filter(StringUtils::hasText)
+                .reduce("", String::concat);
+        return StringUtils.hasText(system) ? system : DEFAULT_SYSTEM;
     }
 
     private AiConfigRecord requireEnabled(ConfigKind kind, String configId, String message) {
         AiConfigRecord record = aiConfigRepository.find(kind, configId);
-        if (record == null || record.getStatus() == null || record.getStatus() != ENABLED) {
+        if (!enabled(record)) {
             throw new ChatException(message);
         }
         return record;
+    }
+
+    private boolean enabled(AiConfigRecord record) {
+        return record != null && record.getStatus() != null && record.getStatus() == ENABLED;
     }
 }

@@ -4,6 +4,7 @@ public record WorkRequestDTO(
         String agentId,
         String agentDesc,
         String userMessage,
+        String ragTag,
         String sessionId,
         Integer maxRound,
         Integer maxRetry,

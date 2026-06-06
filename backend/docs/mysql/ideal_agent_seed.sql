@@ -33,8 +33,12 @@ VALUES
 ON DUPLICATE KEY UPDATE prompt_content = VALUES(prompt_content), prompt_status = VALUES(prompt_status);
 
 INSERT INTO ai_advisor (advisor_id, advisor_name, advisor_type, advisor_config, advisor_status)
-VALUES ('advisor_memory_default', 'Default Chat Memory', 'memory', '{"retrieveSize":20}', 1)
+VALUES ('advisor_memory_default', 'Default Chat Memory', 'Memory', '{"maxMessages":20}', 1)
 ON DUPLICATE KEY UPDATE advisor_config = VALUES(advisor_config);
+
+INSERT INTO ai_advisor (advisor_id, advisor_name, advisor_type, advisor_config, advisor_status)
+VALUES ('advisor_rag_sample', 'Sample RAG Advisor', 'Rag', '{"topK":4,"filterExpression":"source == \"note.md\""}', 0)
+ON DUPLICATE KEY UPDATE advisor_config = VALUES(advisor_config), advisor_status = VALUES(advisor_status);
 
 INSERT INTO ai_client (client_id, client_type, client_role, model_id, model_name, client_name, client_status, client_from)
 VALUES ('client_default_chat', 'chat', 'assistant', 'model_default_chat', 'gpt-4o-mini', 'Default Chat Client', 0, 0)
