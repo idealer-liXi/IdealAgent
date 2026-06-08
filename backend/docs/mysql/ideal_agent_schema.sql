@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS ai_model (
   model_id VARCHAR(64) NOT NULL,
   api_id VARCHAR(64) NOT NULL,
   model_name VARCHAR(128) NOT NULL,
-  model_type VARCHAR(32) NOT NULL DEFAULT 'chat',
+  model_type VARCHAR(32) NOT NULL DEFAULT 'model',
   model_status TINYINT NOT NULL DEFAULT 1,
   model_from BIGINT NOT NULL DEFAULT 0,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -140,17 +140,17 @@ CREATE TABLE IF NOT EXISTS ai_config (
 
 CREATE TABLE IF NOT EXISTS ai_flow (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  flow_id VARCHAR(64) NOT NULL,
   agent_id VARCHAR(64) NOT NULL,
   client_id VARCHAR(64) NOT NULL,
-  role_type VARCHAR(64) NOT NULL,
-  sort_order INT NOT NULL DEFAULT 0,
-  flow_status TINYINT NOT NULL DEFAULT 1,
+  client_role VARCHAR(64) NOT NULL,
+  user_prompt TEXT NOT NULL,
+  flow_seq INT NOT NULL DEFAULT 1,
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_flow_id (flow_id),
+  UNIQUE KEY uk_flow_agent_client (agent_id, client_id),
   KEY idx_flow_agent (agent_id),
-  KEY idx_flow_client (client_id)
+  KEY idx_flow_client (client_id),
+  KEY idx_flow_seq (agent_id, flow_seq)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ai_task (

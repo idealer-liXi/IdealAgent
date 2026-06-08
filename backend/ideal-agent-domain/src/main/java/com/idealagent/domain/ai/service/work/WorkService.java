@@ -4,10 +4,13 @@ import com.idealagent.domain.ai.model.dto.WorkRequestDTO;
 import com.idealagent.domain.ai.model.entity.ExecuteRequestEntity;
 import com.idealagent.domain.ai.model.entity.ExecuteResponseEntity;
 import com.idealagent.domain.ai.model.entity.WorkAgent;
+import com.idealagent.domain.ai.model.vo.AiFlowVO;
 import com.idealagent.domain.ai.model.vo.WorkAgentOptionVO;
 import com.idealagent.domain.ai.repository.IWorkAgentRepository;
 import com.idealagent.domain.session.model.entity.ChatMessage;
 import com.idealagent.domain.session.model.entity.ChatSession;
+import com.idealagent.domain.session.model.vo.ChatMessageVO;
+import com.idealagent.domain.session.model.vo.ChatSessionVO;
 import com.idealagent.domain.session.repository.ISessionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -15,6 +18,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -27,6 +31,10 @@ public class WorkService {
     private static final String REPLIER_OVERVIEW = "replier_overview";
     private static final String EVALUATOR_OVERVIEW = "evaluator_overview";
     private static final int ENABLED = 1;
+    private static final Map<String, List<String>> ROLE_ORDER = Map.of(
+            "step", List.of("inspector", "planner", "runner", "replier"),
+            "loop", List.of("analyzer", "performer", "supervisor", "summarizer"),
+            "react", List.of("observer", "reasoner", "actor", "evaluator"));
 
     private final ISessionRepository sessionRepository;
     private final IWorkAgentRepository workAgentRepository;
@@ -43,6 +51,7 @@ public class WorkService {
 
     public List<WorkAgentOptionVO> listAgents() {
         return workAgentRepository.listEnabledAgents().stream()
+                .filter(this::hasCompleteStrategyFlow)
                 .map(agent -> new WorkAgentOptionVO(
                         agent.getAgentId(),
                         StringUtils.hasText(agent.getAgentName()) ? agent.getAgentName() : agent.getAgentId(),
@@ -51,10 +60,28 @@ public class WorkService {
                 .toList();
     }
 
+    public List<ChatSessionVO> listSessions(Long userId) {
+        if (userId == null) {
+            throw new WorkException("用户未登录");
+        }
+        return sessionRepository.listSessions(userId, WORK_TYPE).stream().map(this::toSessionVo).toList();
+    }
+
+    public List<ChatMessageVO> listMessages(Long userId, String sessionId) {
+        if (userId == null) {
+            throw new WorkException("用户未登录");
+        }
+        if (!StringUtils.hasText(sessionId) || sessionRepository.findSession(sessionId, userId, WORK_TYPE).isEmpty()) {
+            throw new WorkException("会话不存在");
+        }
+        return sessionRepository.listMessages(sessionId, userId).stream().map(this::toMessageVo).toList();
+    }
+
     public void execute(Long userId, WorkRequestDTO request, WorkEventSink sink) {
         validate(userId, request);
         WorkAgent agent = requireAgent(request.agentId());
         validateAgentDesc(request.agentDesc(), agent.getAgentDesc());
+        assertCompleteStrategyFlow(agent);
         if (!matchChecker.isTaskMatched(agent.getAgentId(), agent.getAgentDesc(), request.userMessage())) {
             throw new WorkException("当前任务需求与智能体定位不匹配，请更换智能体或调整需求");
         }
@@ -65,7 +92,6 @@ public class WorkService {
         executeRequest.setUserId(userId);
         executeRequest.setAgentId(agent.getAgentId());
         executeRequest.setUserMessage(request.userMessage());
-        executeRequest.setRagTag(request.ragTag());
         executeRequest.setSessionId(sessionId);
         executeRequest.setMaxRound(request.maxRound());
         executeRequest.setMaxRetry(safeRetry(request.maxRetry()));
@@ -86,6 +112,7 @@ public class WorkService {
 
             @Override
             public void complete(ExecuteResponseEntity response) {
+                sessionRepository.saveMessage(WorkService.this.message(sessionId, EVENT_ROLE, toJson(response)));
                 delegate.complete(response);
             }
 
@@ -136,6 +163,48 @@ public class WorkService {
         }
     }
 
+    private boolean hasCompleteStrategyFlow(WorkAgent agent) {
+        if (agent == null || !StringUtils.hasText(agent.getAgentId())) {
+            return false;
+        }
+        return missingStrategyRoles(agent).isEmpty();
+    }
+
+    private void assertCompleteStrategyFlow(WorkAgent agent) {
+        List<String> missing = missingStrategyRoles(agent);
+        if (!missing.isEmpty()) {
+            throw new WorkException("Agent Flow 未完整配置，缺少角色：" + String.join(", ", missing));
+        }
+    }
+
+    private List<String> missingStrategyRoles(WorkAgent agent) {
+        List<String> roles = ROLE_ORDER.get(normalize(agent.getAgentType()));
+        if (roles == null) {
+            return List.of("strategy");
+        }
+        Map<String, AiFlowVO> flows = workAgentRepository.listFlowMap(agent.getAgentId());
+        return roles.stream()
+                .filter(role -> !hasRoleFlow(flows, role, roles.indexOf(role) + 1))
+                .toList();
+    }
+
+    private boolean hasRoleFlow(Map<String, AiFlowVO> flows, String role, int seq) {
+        if (flows == null || flows.isEmpty()) {
+            return false;
+        }
+        AiFlowVO flow = flows.get(role);
+        if (flow == null) {
+            return false;
+        }
+        return seq == (flow.getFlowSeq() == null ? -1 : flow.getFlowSeq())
+                && role.equals(normalize(flow.getClientRole()))
+                && StringUtils.hasText(flow.getClientId());
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase();
+    }
+
     private String ensureSession(Long userId, WorkRequestDTO request, WorkAgent agent) {
         String sessionId = StringUtils.hasText(request.sessionId()) ? request.sessionId() : id("session_");
         if (sessionRepository.findSession(sessionId, userId).isPresent()) {
@@ -163,6 +232,14 @@ public class WorkService {
         message.setContent(content);
         message.setCreateTime(LocalDateTime.now());
         return message;
+    }
+
+    private ChatMessageVO toMessageVo(ChatMessage message) {
+        return new ChatMessageVO(message.getMessageId(), message.getSessionId(), message.getRole(), message.getContent(), message.getCreateTime());
+    }
+
+    private ChatSessionVO toSessionVo(ChatSession session) {
+        return new ChatSessionVO(session.getSessionId(), session.getTitle(), session.getTargetId(), session.getCreateTime(), session.getUpdateTime());
     }
 
     private int safeRetry(Integer value) {

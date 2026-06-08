@@ -46,10 +46,10 @@ public class WorkAgentRepository implements IWorkAgentRepository {
             AiFlowVO vo = new AiFlowVO();
             vo.setAgentId(flow.getAgentId());
             vo.setClientId(flow.getClientId());
-            vo.setClientRole(flow.getRoleType());
-            vo.setUserPrompt(flow.getPromptContent());
-            vo.setFlowSeq(flow.getSortOrder());
-            flowMap.put(flow.getRoleType(), vo);
+            vo.setClientRole(flow.getClientRole());
+            vo.setUserPrompt(flow.getUserPrompt());
+            vo.setFlowSeq(flow.getFlowSeq());
+            flowMap.put(flow.getClientRole(), vo);
         }
         return flowMap;
     }

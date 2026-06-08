@@ -30,6 +30,7 @@ public class StepReplierNode extends StepNodeSupport {
             if (overview != null && !overview.isNull()) {
                 emit(sink, REPLIER_OVERVIEW, overview.asText(), null, request.getSessionId());
             }
+            context.setValue("replier_response", result.toString());
         } catch (Exception e) {
             emitException(sink, REPLIER, e, null, request.getSessionId());
         }

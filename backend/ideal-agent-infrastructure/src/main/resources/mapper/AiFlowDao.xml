@@ -2,74 +2,54 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.idealagent.infrastructure.persistent.dao.IAiFlowDao">
     <resultMap id="dataMap" type="com.idealagent.infrastructure.persistent.po.AiFlow">
-        <id column="flow_id" property="flowId"/>
         <result column="agent_id" property="agentId"/>
         <result column="client_id" property="clientId"/>
-        <result column="role_type" property="roleType"/>
-        <result column="sort_order" property="sortOrder"/>
-        <result column="flow_status" property="flowStatus"/>
-        <result column="prompt_id" property="promptId"/>
-        <result column="prompt_content" property="promptContent"/>
+        <result column="client_role" property="clientRole"/>
+        <result column="user_prompt" property="userPrompt"/>
+        <result column="flow_seq" property="flowSeq"/>
     </resultMap>
 
     <select id="listEnabledByAgentId" resultMap="dataMap">
-        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
-               c.ref_id AS prompt_id,
-               p.prompt_content AS prompt_content
-        FROM ai_flow f
-        LEFT JOIN ai_config c ON c.owner_type = 'flow'
-            AND c.owner_id = f.flow_id
-            AND c.config_type = 'prompt'
-            AND c.config_status = 1
-        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
-            AND p.prompt_status = 1
-        WHERE f.agent_id = #{agentId}
-          AND f.flow_status = 1
-        ORDER BY f.sort_order ASC
+        SELECT agent_id, client_id, client_role, user_prompt, flow_seq
+        FROM ai_flow
+        WHERE agent_id = #{agentId}
+        ORDER BY flow_seq ASC, id ASC
     </select>
 
     <select id="listByAgentId" resultMap="dataMap">
-        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
-               c.ref_id AS prompt_id,
-               p.prompt_content AS prompt_content
-        FROM ai_flow f
-        LEFT JOIN ai_config c ON c.owner_type = 'flow'
-            AND c.owner_id = f.flow_id
-            AND c.config_type = 'prompt'
-        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
-        WHERE f.agent_id = #{agentId}
-        ORDER BY f.sort_order ASC
+        SELECT agent_id, client_id, client_role, user_prompt, flow_seq
+        FROM ai_flow
+        WHERE agent_id = #{agentId}
+        ORDER BY flow_seq ASC, id ASC
     </select>
 
-    <select id="queryByFlowId" resultMap="dataMap">
-        SELECT f.flow_id, f.agent_id, f.client_id, f.role_type, f.sort_order, f.flow_status,
-               c.ref_id AS prompt_id,
-               p.prompt_content AS prompt_content
-        FROM ai_flow f
-        LEFT JOIN ai_config c ON c.owner_type = 'flow'
-            AND c.owner_id = f.flow_id
-            AND c.config_type = 'prompt'
-        LEFT JOIN ai_prompt p ON p.prompt_id = c.ref_id
-        WHERE f.flow_id = #{flowId}
+    <select id="queryByAgentIdAndClientId" resultMap="dataMap">
+        SELECT agent_id, client_id, client_role, user_prompt, flow_seq
+        FROM ai_flow
+        WHERE agent_id = #{agentId}
+          AND client_id = #{clientId}
         LIMIT 1
     </select>
 
     <insert id="insert" parameterType="com.idealagent.infrastructure.persistent.po.AiFlow">
-        INSERT INTO ai_flow (flow_id, agent_id, client_id, role_type, sort_order, flow_status)
-        VALUES (#{flowId}, #{agentId}, #{clientId}, #{roleType}, #{sortOrder}, #{flowStatus})
+        INSERT INTO ai_flow (agent_id, client_id, client_role, user_prompt, flow_seq)
+        VALUES (#{agentId}, #{clientId}, #{clientRole}, #{userPrompt}, #{flowSeq})
     </insert>
 
-    <update id="update" parameterType="com.idealagent.infrastructure.persistent.po.AiFlow">
+    <update id="update">
         UPDATE ai_flow
-        SET agent_id = #{agentId}, client_id = #{clientId}, role_type = #{roleType}, sort_order = #{sortOrder}, flow_status = #{flowStatus}
-        WHERE flow_id = #{flowId}
+        SET agent_id = #{flow.agentId}, client_id = #{flow.clientId}, client_role = #{flow.clientRole}, user_prompt = #{flow.userPrompt}, flow_seq = #{flow.flowSeq}
+        WHERE agent_id = #{originAgentId}
+          AND client_id = #{originClientId}
     </update>
 
-    <update id="updateStatus">
-        UPDATE ai_flow SET flow_status = #{status} WHERE flow_id = #{flowId}
-    </update>
+    <delete id="deleteByAgentIdAndClientId">
+        DELETE FROM ai_flow
+        WHERE agent_id = #{agentId}
+          AND client_id = #{clientId}
+    </delete>
 
-    <delete id="delete">
-        DELETE FROM ai_flow WHERE flow_id = #{flowId}
+    <delete id="deleteByAgentId">
+        DELETE FROM ai_flow WHERE agent_id = #{agentId}
     </delete>
 </mapper>

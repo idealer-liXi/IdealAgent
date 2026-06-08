@@ -13,6 +13,9 @@ import java.util.List;
 @Service
 public class AiConfigService {
     private static final int ENABLED = 1;
+    private static final String MODEL_TYPE = "model";
+    private static final String CHAT_CLIENT_TYPE = "chat";
+    private static final String WORK_CLIENT_TYPE = "work";
 
     private final IAiConfigRepository aiConfigRepository;
 
@@ -25,7 +28,7 @@ public class AiConfigService {
         AiConfigRecord record = new AiConfigRecord();
         record.setConfigId(request.configId());
         record.setName(request.name());
-        record.setType(request.type());
+        record.setType(normalizeType(kind, request.type()));
         record.setContent(request.content());
         record.setSecret(request.secret());
         record.setRefId(request.refId());
@@ -33,6 +36,7 @@ public class AiConfigService {
         record.setOwnerId(request.ownerId() == null ? 0L : request.ownerId());
         record.setOwnerType(request.ownerType());
         record.setConfigType(request.configType());
+        validateBindingBoundary(kind, record);
         return toVo(aiConfigRepository.save(kind, record));
     }
 
@@ -44,8 +48,9 @@ public class AiConfigService {
         if (!StringUtils.hasText(configId)) {
             throw new AiConfigException("配置ID不能为空");
         }
-        AiConfigRecord record = toRecord(request, configId);
+        AiConfigRecord record = toRecord(kind, request, configId);
         validate(record);
+        validateBindingBoundary(kind, record);
         return toVo(aiConfigRepository.update(kind, record));
     }
 
@@ -122,11 +127,11 @@ public class AiConfigService {
         }
     }
 
-    private AiConfigRecord toRecord(AiConfigRecordDTO request, String configId) {
+    private AiConfigRecord toRecord(ConfigKind kind, AiConfigRecordDTO request, String configId) {
         AiConfigRecord record = new AiConfigRecord();
         record.setConfigId(configId);
         record.setName(request.name());
-        record.setType(request.type());
+        record.setType(normalizeType(kind, request.type()));
         record.setContent(request.content());
         record.setSecret(request.secret());
         record.setRefId(request.refId());
@@ -135,6 +140,44 @@ public class AiConfigService {
         record.setOwnerType(request.ownerType());
         record.setConfigType(request.configType());
         return record;
+    }
+
+    private String normalizeType(ConfigKind kind, String type) {
+        if (kind == ConfigKind.MODEL) {
+            return MODEL_TYPE;
+        }
+        if (kind == ConfigKind.CLIENT) {
+            if (WORK_CLIENT_TYPE.equalsIgnoreCase(type)) {
+                return WORK_CLIENT_TYPE;
+            }
+            return CHAT_CLIENT_TYPE;
+        }
+        return type;
+    }
+
+    private void validateBindingBoundary(ConfigKind kind, AiConfigRecord record) {
+        if (kind != ConfigKind.CONFIG || !"client".equalsIgnoreCase(firstText(record.getOwnerType(), record.getType()))) {
+            return;
+        }
+        String clientId = firstText(record.getContent(), String.valueOf(record.getOwnerId()));
+        AiConfigRecord client = aiConfigRepository.find(ConfigKind.CLIENT, clientId);
+        if (client == null || !CHAT_CLIENT_TYPE.equalsIgnoreCase(client.getType())) {
+            return;
+        }
+        String configType = firstText(record.getConfigType(), record.getSecret());
+        if ("mcp".equalsIgnoreCase(configType)) {
+            throw new AiConfigException("Chat Client 不允许绑定 MCP");
+        }
+        if ("advisor".equalsIgnoreCase(configType)) {
+            AiConfigRecord advisor = aiConfigRepository.find(ConfigKind.ADVISOR, record.getRefId());
+            if (advisor != null && "rag".equalsIgnoreCase(advisor.getType())) {
+                throw new AiConfigException("Chat Client 不允许绑定 RAG Advisor");
+            }
+        }
+    }
+
+    private String firstText(String first, String second) {
+        return StringUtils.hasText(first) ? first : second;
     }
 
     private AiConfigRecordVO toVo(AiConfigRecord record) {

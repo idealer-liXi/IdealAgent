@@ -18,15 +18,20 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class RuntimeMessageBuilder {
     private static final String USER_ROLE = "user";
     private static final String SYSTEM_ROLE = "system";
     private static final String ASSISTANT_ROLE = "assistant";
+    private static final String CHAT_TYPE = "chat";
     private static final int ENABLED = 1;
     private static final int DEFAULT_HISTORY_RETRIEVE_SIZE = 10;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Pattern KNOWLEDGE_FILTER = Pattern.compile("knowledge\\s*==\\s*['\"]([^'\"]+)['\"]", Pattern.CASE_INSENSITIVE);
 
     private final ISessionRepository sessionRepository;
     private final IAiConfigRepository aiConfigRepository;
@@ -40,9 +45,8 @@ public class RuntimeMessageBuilder {
 
     public List<Message> build(Long userId, String sessionId, String clientId, String content, String ragTag, String messageType) {
         List<Message> messages = new ArrayList<>();
-        Integer ragTopK = StringUtils.hasText(ragTag) ? effectiveRagTopK(clientId) : null;
-        String ragFilterExpression = StringUtils.hasText(ragTag) ? effectiveRagFilterExpression(clientId) : null;
-        List<Message> augmentedMessages = augmentService.augmentRagMessage(userId, content, ragTag, ragTopK, ragFilterExpression);
+        RagSettings ragSettings = CHAT_TYPE.equals(messageType) ? requestRagSettings(ragTag) : effectiveRagSettings(clientId, ragTag);
+        List<Message> augmentedMessages = augmentService.augmentRagMessage(userId, content, ragSettings.ragTag(), ragSettings.topK(), ragSettings.filterExpression());
         List<Message> currentUserMessages = new ArrayList<>();
         for (Message message : augmentedMessages) {
             if (message instanceof UserMessage) {
@@ -98,20 +102,22 @@ public class RuntimeMessageBuilder {
                 .orElse(DEFAULT_HISTORY_RETRIEVE_SIZE);
     }
 
-    private Integer effectiveRagTopK(String clientId) {
-        return ragAdvisorContent(clientId)
+    private RagSettings effectiveRagSettings(String clientId, String requestRagTag) {
+        Optional<String> advisorContent = ragAdvisorContent(clientId).findFirst();
+        Integer topK = advisorContent
                 .map(content -> configInt(content, 0, "topK"))
                 .filter(size -> size > 0)
-                .findFirst()
                 .orElse(null);
-    }
-
-    private String effectiveRagFilterExpression(String clientId) {
-        return ragAdvisorContent(clientId)
+        String filterExpression = advisorContent
                 .map(content -> configString(content, "filterExpression"))
                 .filter(StringUtils::hasText)
-                .findFirst()
                 .orElse(null);
+        String effectiveRagTag = StringUtils.hasText(requestRagTag) ? requestRagTag : knowledgeTag(filterExpression);
+        return new RagSettings(effectiveRagTag, topK, filterExpression);
+    }
+
+    private RagSettings requestRagSettings(String requestRagTag) {
+        return new RagSettings(StringUtils.hasText(requestRagTag) ? requestRagTag : null, null, null);
     }
 
     private java.util.stream.Stream<String> ragAdvisorContent(String clientId) {
@@ -120,6 +126,14 @@ public class RuntimeMessageBuilder {
                 .filter(this::enabled)
                 .filter(advisor -> typeEquals(advisor, "rag"))
                 .map(AiConfigRecord::getContent);
+    }
+
+    private String knowledgeTag(String filterExpression) {
+        if (!StringUtils.hasText(filterExpression)) {
+            return null;
+        }
+        Matcher matcher = KNOWLEDGE_FILTER.matcher(filterExpression);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     private List<AiConfigRecord> clientBindings(String clientId, String configType) {
@@ -168,5 +182,8 @@ public class RuntimeMessageBuilder {
 
     private boolean typeEquals(AiConfigRecord record, String type) {
         return record != null && record.getType() != null && record.getType().equalsIgnoreCase(type);
+    }
+
+    private record RagSettings(String ragTag, Integer topK, String filterExpression) {
     }
 }

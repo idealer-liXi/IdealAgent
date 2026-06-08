@@ -48,6 +48,54 @@ class AiConfigServiceTest {
     }
 
     @Test
+    void createModelStoresNeutralModelTypeInsteadOfChatOrWork() {
+        AiConfigRecordVO created = service.create(ConfigKind.MODEL, new AiConfigRecordDTO(
+                "model_gpt", "GPT", "work", null, null, "api_openai", 1, 0L));
+
+        assertThat(created.type()).isEqualTo("model");
+        assertThat(repository.list(ConfigKind.MODEL).get(0).getType()).isEqualTo("model");
+    }
+
+    @Test
+    void createClientKeepsChatOrWorkClientType() {
+        AiConfigRecordVO created = service.create(ConfigKind.CLIENT, new AiConfigRecordDTO(
+                "client_runner", "Runner", "work", "runner", "gpt-4o", "model_gpt", 1, 0L));
+
+        assertThat(created.type()).isEqualTo("work");
+        assertThat(repository.list(ConfigKind.CLIENT).get(0).getType()).isEqualTo("work");
+    }
+
+    @Test
+    void rejectsChatClientRagAdvisorBinding() {
+        service.create(ConfigKind.CLIENT, new AiConfigRecordDTO("client_chat", "Chat", "chat", "assistant", "gpt-4o", "model_gpt", 1, 0L));
+        service.create(ConfigKind.ADVISOR, new AiConfigRecordDTO("advisor_rag", "Rag", "Rag", "{}", null, null, 1, 0L));
+
+        assertThatThrownBy(() -> service.create(ConfigKind.CONFIG, new AiConfigRecordDTO("config_chat_rag", null, "client", "client_chat", "advisor", "advisor_rag", 1, 0L, "client", "advisor")))
+                .isInstanceOf(AiConfigException.class)
+                .hasMessage("Chat Client 不允许绑定 RAG Advisor");
+    }
+
+    @Test
+    void rejectsChatClientMcpBinding() {
+        service.create(ConfigKind.CLIENT, new AiConfigRecordDTO("client_chat", "Chat", "chat", "assistant", "gpt-4o", "model_gpt", 1, 0L));
+        service.create(ConfigKind.MCP, new AiConfigRecordDTO("mcp_weather", "Weather", "stdio", "{}", null, null, 1, 0L));
+
+        assertThatThrownBy(() -> service.create(ConfigKind.CONFIG, new AiConfigRecordDTO("config_chat_mcp", null, "client", "client_chat", "mcp", "mcp_weather", 1, 0L, "client", "mcp")))
+                .isInstanceOf(AiConfigException.class)
+                .hasMessage("Chat Client 不允许绑定 MCP");
+    }
+
+    @Test
+    void allowsChatClientMemoryAdvisorBinding() {
+        service.create(ConfigKind.CLIENT, new AiConfigRecordDTO("client_chat", "Chat", "chat", "assistant", "gpt-4o", "model_gpt", 1, 0L));
+        service.create(ConfigKind.ADVISOR, new AiConfigRecordDTO("advisor_memory", "Memory", "Memory", "{}", null, null, 1, 0L));
+
+        AiConfigRecordVO created = service.create(ConfigKind.CONFIG, new AiConfigRecordDTO("config_chat_memory", null, "client", "client_chat", "advisor", "advisor_memory", 1, 0L, "client", "advisor"));
+
+        assertThat(created.configId()).isEqualTo("config_chat_memory");
+    }
+
+    @Test
     void createRejectsBlankId() {
         assertThatThrownBy(() -> service.create(ConfigKind.API, new AiConfigRecordDTO(
                 "", "OpenAI", "openai", null, null, null, 1, 0L)))
@@ -65,6 +113,17 @@ class AiConfigServiceTest {
         assertThat(updated.configId()).isEqualTo("api_openai");
         assertThat(updated.name()).isEqualTo("DeepSeek");
         assertThat(updated.content()).isEqualTo("https://api.deepseek.com");
+    }
+
+    @Test
+    void updateRejectsChatClientMcpBinding() {
+        service.create(ConfigKind.CLIENT, new AiConfigRecordDTO("client_chat", "Chat", "chat", "assistant", "gpt-4o", "model_gpt", 1, 0L));
+        service.create(ConfigKind.MCP, new AiConfigRecordDTO("mcp_weather", "Weather", "stdio", "{}", null, null, 1, 0L));
+        service.create(ConfigKind.CONFIG, new AiConfigRecordDTO("config_prompt", null, "client", "client_chat", "prompt", "prompt_system", 1, 0L, "client", "prompt"));
+
+        assertThatThrownBy(() -> service.update(ConfigKind.CONFIG, "config_prompt", new AiConfigRecordDTO("ignored", null, "client", "client_chat", "mcp", "mcp_weather", 1, 0L, "client", "mcp")))
+                .isInstanceOf(AiConfigException.class)
+                .hasMessage("Chat Client 不允许绑定 MCP");
     }
 
     @Test

@@ -5,16 +5,28 @@ import { getToken } from '../utils/auth'
 import Sidebar from './Sidebar.vue'
 import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
+import SessionList from './chat/SessionList.vue'
+import {
+  activeParameterForAgent,
+  buildProcessCards,
+  canSendWork,
+  isParameterEditable,
+  userInputCard
+} from './work/workUiState'
 
 const overviewTypes = new Set(['summarizer_overview', 'replier_overview', 'evaluator_overview'])
+const strategyRoles = {
+  step: ['inspector', 'planner', 'runner', 'replier'],
+  loop: ['analyzer', 'performer', 'supervisor', 'summarizer'],
+  react: ['observer', 'reasoner', 'actor', 'evaluator']
+}
 
 const agents = ref([])
-const ragTags = ref([])
 const agentId = ref('')
-const selectedRagTag = ref('')
 const content = ref('')
 const cards = ref([])
 const messages = ref([])
+const sessions = ref([])
 const finalAnswer = ref('')
 const error = ref('')
 const agentError = ref('')
@@ -24,13 +36,25 @@ const maxRound = ref(2)
 const maxPace = ref(3)
 const sessionId = ref('')
 const processListRef = ref(null)
+const parameterInputBaseClass = 'w-full rounded-card border border-border-default px-3 py-2 text-sm outline-none transition-colors'
 
 const selectedAgent = computed(() => agents.value.find(item => item.agentId === agentId.value) || null)
-const canSend = computed(() => Boolean(agentId.value && content.value.trim() && !loading.value))
+const canSend = computed(() => canSendWork({ agentId: agentId.value, content: content.value, loading: loading.value }))
+const activeParameter = computed(() => activeParameterForAgent(selectedAgent.value?.agentType))
+const flowRoles = computed(() => strategyRoles[(selectedAgent.value?.agentType || '').toLowerCase()] || [])
+const completedRoles = computed(() => new Set(cards.value.map(card => card?.clientType).filter(Boolean)))
+const activeRole = computed(() => {
+  if (!loading.value) return ''
+  return flowRoles.value.find(role => !completedRoles.value.has(role)) || flowRoles.value.at(-1) || ''
+})
+const flowProgress = computed(() => flowRoles.value.map(role => ({
+  role,
+  status: completedRoles.value.has(role) ? 'done' : activeRole.value === role ? 'active' : 'pending'
+})))
 
 onMounted(() => {
   loadAgents()
-  loadRagTags()
+  loadSessions()
 })
 
 watch(cards, scrollProcessToBottom, { deep: true })
@@ -49,15 +73,35 @@ async function loadAgents() {
   }
 }
 
-async function loadRagTags() {
+async function loadSessions() {
   try {
-    const response = await request.get('/ai/rag/tags')
-    ragTags.value = response.data.data || []
-    if (selectedRagTag.value && !ragTags.value.some(tag => tag.ragTag === selectedRagTag.value)) {
-      selectedRagTag.value = ''
-    }
+    const response = await request.get('/ai/work/sessions')
+    sessions.value = response.data.data || []
   } catch (e) {
-    ragTags.value = []
+    error.value = e.response?.data?.message || '历史工作加载失败'
+  }
+}
+
+async function loadMessages(nextSessionId) {
+  sessionId.value = nextSessionId
+  error.value = ''
+  try {
+    const response = await request.get(`/ai/work/messages/${nextSessionId}`)
+    const history = response.data.data || []
+    messages.value = history.filter(item => item.role === 'user' || item.role === 'assistant')
+    cards.value = buildProcessCards(history, parseEventCard)
+    finalAnswer.value = [...messages.value].reverse().find(item => item.role === 'assistant')?.content || ''
+    scrollProcessToBottom()
+  } catch (e) {
+    error.value = e.response?.data?.message || '历史工作消息加载失败'
+  }
+}
+
+function parseEventCard(content) {
+  try {
+    return JSON.parse(content)
+  } catch (e) {
+    return null
   }
 }
 
@@ -91,6 +135,9 @@ function clampNumber(value, min, max, fallback) {
 }
 
 async function send() {
+  if (loading.value) {
+    return
+  }
   const userMessage = content.value.trim()
   if (!userMessage) {
     error.value = '请输入任务内容'
@@ -102,7 +149,7 @@ async function send() {
   }
   error.value = ''
   loading.value = true
-  cards.value = []
+  cards.value = [userInputCard(userMessage)]
   finalAnswer.value = ''
   messages.value.push({ role: 'user', content: userMessage })
   content.value = ''
@@ -117,7 +164,6 @@ async function send() {
         agentId: agentId.value,
         agentDesc: selectedAgentDesc(),
         userMessage,
-        ragTag: selectedRagTag.value || null,
         sessionId: sessionId.value || null,
         maxRetry: clampNumber(maxRetry.value, 1, 5, 2),
         maxRound: clampNumber(maxRound.value, 1, 5, 2),
@@ -128,6 +174,7 @@ async function send() {
       throw new Error('Work Agent 执行失败')
     }
     await readStream(response)
+    await loadSessions()
   } catch (e) {
     error.value = e.message || 'Work Agent 执行失败'
   } finally {
@@ -202,7 +249,6 @@ function appendWorkPayload(payload, eventName) {
   if (overviewTypes.has(parsed.sectionType)) {
     finalAnswer.value = parsed.sectionContent || finalAnswer.value
     upsertAssistantMessage(finalAnswer.value || '（无内容）')
-    return
   }
   if (eventName === 'complete') {
     return
@@ -230,6 +276,48 @@ function cardMeta(card) {
     return `pace ${card.pace}`
   }
   return ''
+}
+
+function parameterDisabled(parameter) {
+  return loading.value || !isParameterEditable(selectedAgent.value?.agentType, parameter)
+}
+
+function parameterInputClass(parameter) {
+  return parameterDisabled(parameter)
+    ? `${parameterInputBaseClass} cursor-not-allowed bg-slate-100 text-text-tertiary opacity-70`
+    : `${parameterInputBaseClass} bg-surface focus:border-accent`
+}
+
+function parameterTitle(parameter) {
+  if (!selectedAgent.value) {
+    return '请选择 Work Agent'
+  }
+  if (activeParameter.value === parameter) {
+    return '当前策略参数可修改'
+  }
+  return '该参数不适用于当前 Agent 策略'
+}
+
+function cardClass(card) {
+  return card.clientType === 'user'
+    ? 'border-accent/20 bg-accent-light/40'
+    : 'border-border-default bg-surface'
+}
+
+function progressDotClass(status) {
+  if (status === 'done') {
+    return 'bg-accent text-white shadow-[0_1px_3px_rgba(37,99,235,0.3),inset_0_1px_1px_rgba(255,255,255,0.25)]'
+  }
+  if (status === 'active') {
+    return 'border-[1.5px] border-accent bg-white text-accent shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)] ring-[3px] ring-accent/10'
+  }
+  return 'border border-border-default bg-surface text-text-tertiary shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]'
+}
+
+function progressLineClass(index) {
+  return index > 0 && flowProgress.value[index - 1]?.status === 'done'
+    ? 'bg-accent'
+    : 'bg-[#dbeafe]'
 }
 </script>
 
@@ -281,21 +369,6 @@ function cardMeta(card) {
                   </p>
                 </div>
 
-                <label class="mt-4 block">
-                  <span class="mb-2 block text-sm font-semibold text-text-secondary">RAG 知识库</span>
-                  <select
-                    v-model="selectedRagTag"
-                    class="w-full rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
-                    :disabled="loading"
-                  >
-                    <option value="">不使用知识库</option>
-                    <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">
-                      {{ tag.ragTag }}
-                    </option>
-                  </select>
-                  <p class="mt-2 text-xs text-text-tertiary">RAG Advisor 只控制检索参数；这里决定本次 Agent 是否使用哪个知识库。</p>
-                </label>
-
                 <p v-if="agentError" class="mt-3 rounded-card border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{{ agentError }}</p>
                 <p v-else-if="agents.length === 0" class="mt-3 rounded-card border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   暂无启用的 Work Agent，请先启用 step、loop 或 react 类型 Agent。
@@ -304,36 +377,36 @@ function cardMeta(card) {
                 <div class="mt-5 grid grid-cols-3 gap-3">
                   <label class="block">
                     <span class="mb-1 block text-xs font-semibold text-text-secondary">Retry</span>
-                    <input v-model.number="maxRetry" class="w-full rounded-card border border-border-default bg-surface px-3 py-2 text-sm outline-none focus:border-accent" max="5" min="1" type="number" />
+                    <input v-model.number="maxRetry" :class="parameterInputClass('retry')" :disabled="parameterDisabled('retry')" :title="parameterTitle('retry')" max="5" min="1" type="number" />
                   </label>
                   <label class="block">
                     <span class="mb-1 block text-xs font-semibold text-text-secondary">Round</span>
-                    <input v-model.number="maxRound" class="w-full rounded-card border border-border-default bg-surface px-3 py-2 text-sm outline-none focus:border-accent" max="5" min="1" type="number" />
+                    <input v-model.number="maxRound" :class="parameterInputClass('round')" :disabled="parameterDisabled('round')" :title="parameterTitle('round')" max="5" min="1" type="number" />
                   </label>
                   <label class="block">
                     <span class="mb-1 block text-xs font-semibold text-text-secondary">Pace</span>
-                    <input v-model.number="maxPace" class="w-full rounded-card border border-border-default bg-surface px-3 py-2 text-sm outline-none focus:border-accent" max="5" min="1" type="number" />
+                    <input v-model.number="maxPace" :class="parameterInputClass('pace')" :disabled="parameterDisabled('pace')" :title="parameterTitle('pace')" max="5" min="1" type="number" />
                   </label>
                 </div>
 
-                <UiButton variant="secondary" full-width class="mt-4" :disabled="loading" @click="newRun">
+                <UiButton variant="primary" full-width class="mt-4" :disabled="loading" @click="newRun">
                   新任务
                 </UiButton>
               </div>
 
               <div class="mt-6 flex flex-col flex-1 min-h-0 overflow-hidden">
                 <div class="mb-3 flex items-center justify-between text-sm text-text-secondary">
-                  <span class="font-semibold">当前会话</span>
-                  <span class="font-mono text-xs">{{ sessionId || '新会话' }}</span>
+                  <span class="font-semibold">历史工作</span>
+                  <button class="text-sm font-medium text-accent hover:text-accent-hover transition-colors" type="button" @click="loadSessions">
+                    刷新
+                  </button>
                 </div>
                 <div class="flex-1 min-h-0 overflow-y-auto scroll-smooth-thin -mr-2 pr-2 space-y-3">
-                  <div v-for="message in messages" :key="message.role + message.content" class="rounded-card border border-border-subtle bg-surface px-4 py-3">
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-text-tertiary">{{ message.role }}</div>
-                    <p class="whitespace-pre-wrap text-sm leading-relaxed">{{ message.content }}</p>
-                  </div>
-                  <div v-if="messages.length === 0" class="rounded-card border border-dashed border-border-default px-4 py-8 text-center text-sm text-text-tertiary">
-                    输入任务后这里会显示用户请求和最终答案。
-                  </div>
+                  <SessionList
+                    :sessions="sessions"
+                    :active-session-id="sessionId"
+                    @select="loadMessages"
+                  />
                 </div>
               </div>
             </div>
@@ -341,13 +414,39 @@ function cardMeta(card) {
 
           <section class="flex flex-col overflow-hidden min-h-0 rounded-card-lg border border-border-default bg-elevated shadow-card">
             <div class="flex-shrink-0 border-b border-border-subtle px-5 py-4">
-              <div class="flex items-center justify-between gap-4">
+              <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <p class="text-xs font-semibold uppercase tracking-widest text-accent">Execution Stream</p>
                   <h2 class="mt-1 text-lg font-bold">执行过程</h2>
                 </div>
-                <div class="text-sm text-text-secondary">
-                  {{ cards.length }} 个过程事件
+                <div class="flex flex-wrap items-center justify-end gap-4">
+                <div v-if="flowProgress.length" class="flex items-center gap-2">
+                  <template v-for="(item, index) in flowProgress" :key="item.role">
+                    <span v-if="index > 0" class="mt-[11px] h-[2px] w-6 self-start transition-all duration-300" :class="progressLineClass(index)"></span>
+                    <span class="flex flex-col items-center gap-1.5 min-w-[48px]">
+                      <span class="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold uppercase transition-all duration-300" :class="progressDotClass(item.status)">
+                        <template v-if="item.status === 'done'">
+                          <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </template>
+                        <template v-else>
+                          {{ index + 1 }}
+                        </template>
+                      </span>
+                      <span class="relative flex flex-col items-center gap-1">
+                        <span class="text-[10px] font-semibold uppercase tracking-wide transition-colors duration-300" :class="item.status === 'pending' ? 'text-text-tertiary' : 'text-accent'">
+                          {{ item.role }}
+                        </span>
+                        <span v-if="item.status === 'active'" class="h-1 w-1 rounded-full bg-accent animate-pulse"></span>
+                        <span v-else class="h-1 w-1 rounded-full bg-transparent"></span>
+                      </span>
+                    </span>
+                  </template>
+                </div>
+                  <div class="text-sm text-text-secondary">
+                    {{ cards.length }} 个过程事件
+                  </div>
                 </div>
               </div>
             </div>
@@ -357,7 +456,7 @@ function cardMeta(card) {
                 <p class="text-sm">执行后会实时展示 inspector、planner、runner 等角色输出。</p>
               </div>
               <div v-else class="space-y-4">
-                <article v-for="(card, index) in cards" :key="`${card.sectionType}_${index}`" class="rounded-card-lg border border-border-default bg-surface p-4 shadow-card">
+                <article v-for="(card, index) in cards" :key="`${card.sectionType}_${index}`" class="rounded-card-lg border p-4 shadow-card" :class="cardClass(card)">
                   <div class="mb-3 flex flex-wrap items-center gap-2">
                     <span class="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-bold text-accent">{{ card.clientType || 'system' }}</span>
                     <span class="text-sm font-semibold">{{ card.sectionType || 'message' }}</span>
@@ -377,7 +476,7 @@ function cardMeta(card) {
               <textarea
                 v-model="content"
                 class="min-h-[96px] w-full resize-none rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
-                placeholder="输入要交给 Work Agent 执行的任务"
+                :placeholder="loading ? 'Work 执行中，请等待完成后再发送' : '输入要交给 Work Agent 执行的任务'"
                 :disabled="loading"
                 @keydown.ctrl.enter.prevent="send"
                 @keydown.meta.enter.prevent="send"

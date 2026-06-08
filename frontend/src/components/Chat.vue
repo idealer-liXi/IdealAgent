@@ -17,6 +17,11 @@ const clients = ref([])
 const clientError = ref('')
 const ragTags = ref([])
 const selectedRagTag = ref('')
+const mcpTools = ref([])
+const selectedMcpIds = ref([])
+const mcpError = ref('')
+const ragPanelExpanded = ref(false)
+const mcpPanelExpanded = ref(false)
 const uploadPanelOpen = ref(false)
 const ragTagInput = ref('')
 const ragFiles = ref([])
@@ -49,7 +54,7 @@ watch(
 )
 
 onMounted(async () => {
-  await Promise.all([loadSessions(), loadClients()])
+  await Promise.all([loadSessions(), loadClients(), loadMcpTools()])
 })
 
 async function loadClients() {
@@ -63,6 +68,7 @@ async function loadClients() {
       clientError.value = '暂无可用 Client，将使用本地回声模式'
       ragTags.value = []
       selectedRagTag.value = ''
+      selectedMcpIds.value = []
       uploadPanelOpen.value = false
     } else {
       await loadRagTags()
@@ -75,11 +81,27 @@ async function loadClients() {
 async function onClientChange() {
   if (isLocalEchoMode.value) {
     selectedRagTag.value = ''
+    selectedMcpIds.value = []
     uploadPanelOpen.value = false
     ragError.value = ''
     return
   }
   await loadRagTags()
+}
+
+async function loadMcpTools() {
+  mcpError.value = ''
+  try {
+    const response = await request.get('/ai/mcps')
+    const list = response.data.data || []
+    mcpTools.value = list
+    const enabledIds = new Set(mcpTools.value.map(item => item.configId))
+    selectedMcpIds.value = selectedMcpIds.value.filter(id => enabledIds.has(id))
+  } catch (e) {
+    mcpTools.value = []
+    selectedMcpIds.value = []
+    mcpError.value = e.response?.data?.message || 'MCP 工具列表加载失败'
+  }
 }
 
 async function loadRagTags() {
@@ -155,6 +177,23 @@ function clientLabel(client) {
   return `${name} / ${model}`
 }
 
+function mcpLabel(mcp) {
+  return `${mcp.name || mcp.configId} (${mcp.type || 'mcp'})`
+}
+
+function selectedRagLabel() {
+  return selectedRagTag.value || '未选择知识库'
+}
+
+function selectedMcpLabel() {
+  if (!selectedMcpIds.value.length) return '未选择 MCP 工具'
+  if (selectedMcpIds.value.length === 1) {
+    const tool = mcpTools.value.find(item => item.configId === selectedMcpIds.value[0])
+    return tool ? mcpLabel(tool) : selectedMcpIds.value[0]
+  }
+  return `已选择 ${selectedMcpIds.value.length} 个 MCP 工具`
+}
+
 async function loadSessions() {
   try {
     const response = await request.get('/ai/chat/sessions')
@@ -212,7 +251,8 @@ async function send() {
         sessionId: sessionId.value || null,
         clientId: clientId.value || null,
         content: currentContent,
-        ragTag: isLocalEchoMode.value ? null : selectedRagTag.value || null
+        ragTag: isLocalEchoMode.value ? null : selectedRagTag.value || null,
+        mcpIdList: isLocalEchoMode.value ? [] : selectedMcpIds.value
       })
     })
     if (!response.ok || !response.body) {
@@ -307,11 +347,11 @@ function newSession() {
                 <div class="flex items-center justify-between mb-4">
                   <div>
                     <p class="text-xs font-semibold uppercase tracking-widest text-accent">Chat</p>
-                    <h1 class="mt-1 text-xl font-bold">Stage 4 对话</h1>
+                    <h1 class="mt-1 text-xl font-bold">Chat</h1>
                   </div>
                 </div>
                 <p class="text-sm text-text-secondary leading-relaxed">
-                  使用本地 ChatClient 适配器，消息会写入 ai_session 和 ai_message。
+                  选择 Chat Client 发起对话，可按本次请求临时挂载知识库和 MCP 工具。
                 </p>
 
                 <label class="mt-5 block">
@@ -332,28 +372,57 @@ function newSession() {
                 <div v-if="!isLocalEchoMode" class="mt-5 rounded-card border border-border-subtle bg-surface p-3">
                   <div class="flex items-center justify-between">
                     <span class="text-sm font-semibold text-text-secondary">RAG 知识库</span>
-                    <button class="text-xs font-medium text-accent" type="button" @click="loadRagTags">刷新</button>
+                    <div class="flex items-center gap-3">
+                      <button class="text-xs font-medium text-accent" type="button" @click="loadRagTags">刷新</button>
+                      <button class="text-xs font-medium text-accent" type="button" @click="ragPanelExpanded = !ragPanelExpanded">{{ ragPanelExpanded ? '收起' : '添加/选择' }}</button>
+                    </div>
                   </div>
-                  <select v-model="selectedRagTag" class="mt-2 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent">
-                    <option value="">不使用知识库</option>
-                    <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
-                  </select>
+                  <p class="mt-2 rounded-card bg-elevated px-3 py-2 text-xs text-text-tertiary">{{ selectedRagLabel() }}</p>
 
-                  <UiButton variant="secondary" size="sm" full-width class="mt-3" @click="toggleUploadPanel">
-                    {{ uploadPanelOpen ? '收起上传知识库' : '上传知识库' }}
-                  </UiButton>
+                  <div v-if="ragPanelExpanded" class="mt-3">
+                    <select v-model="selectedRagTag" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent">
+                      <option value="">不使用知识库</option>
+                      <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
+                    </select>
 
-                  <div v-if="uploadPanelOpen" class="mt-3">
-                    <input v-model="ragTagInput" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="知识库标签" />
-                    <input class="mt-3 block w-full text-xs text-text-secondary" type="file" multiple accept=".txt,.md,.java,.html" @change="onRagFilesChange" />
-                    <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadRagFiles">上传文件</UiButton>
+                    <UiButton variant="secondary" size="sm" full-width class="mt-3" @click="toggleUploadPanel">
+                      {{ uploadPanelOpen ? '收起上传知识库' : '上传知识库' }}
+                    </UiButton>
 
-                    <input v-model="repoUrl" class="mt-3 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Git repo URL" />
-                    <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadGitRepo">导入 Git</UiButton>
+                    <div v-if="uploadPanelOpen" class="mt-3">
+                      <input v-model="ragTagInput" class="w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="知识库标签" />
+                      <input class="mt-3 block w-full text-xs text-text-secondary" type="file" multiple accept=".txt,.md,.java,.html" @change="onRagFilesChange" />
+                      <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadRagFiles">上传文件</UiButton>
+
+                      <input v-model="repoUrl" class="mt-3 w-full rounded-card border border-border-default bg-elevated px-3 py-2 text-sm outline-none focus:border-accent" placeholder="Git repo URL" />
+                      <UiButton variant="secondary" size="sm" full-width class="mt-3" :loading="ragLoading" @click="uploadGitRepo">导入 Git</UiButton>
+                    </div>
                   </div>
 
                   <p v-if="ragMessage" class="mt-3 rounded-card bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{{ ragMessage }}</p>
                   <p v-if="ragError" class="mt-3 rounded-card bg-red-50 px-3 py-2 text-xs text-red-700">{{ ragError }}</p>
+                </div>
+
+                <div v-if="!isLocalEchoMode" class="mt-4 rounded-card border border-border-subtle bg-surface p-3">
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold text-text-secondary">MCP 工具</span>
+                    <div class="flex items-center gap-3">
+                      <button class="text-xs font-medium text-accent" type="button" @click="loadMcpTools">刷新</button>
+                      <button class="text-xs font-medium text-accent" type="button" @click="mcpPanelExpanded = !mcpPanelExpanded">{{ mcpPanelExpanded ? '收起' : '添加/选择' }}</button>
+                    </div>
+                  </div>
+                  <p class="mt-2 rounded-card bg-elevated px-3 py-2 text-xs text-text-tertiary">{{ selectedMcpLabel() }}</p>
+                  <div v-if="mcpPanelExpanded && mcpTools.length" class="mt-3 max-h-36 space-y-2 overflow-y-auto pr-1 scroll-smooth-thin">
+                    <label v-for="tool in mcpTools" :key="tool.configId" class="flex items-start gap-2 rounded-card border border-border-subtle bg-elevated px-3 py-2 text-sm text-text-secondary">
+                      <input v-model="selectedMcpIds" class="mt-1" type="checkbox" :value="tool.configId" />
+                      <span>
+                        <span class="block font-semibold text-text-primary">{{ mcpLabel(tool) }}</span>
+                        <span class="block text-xs text-text-tertiary">{{ tool.configId }}</span>
+                      </span>
+                    </label>
+                  </div>
+                  <p v-else-if="mcpPanelExpanded" class="mt-3 rounded-card border border-dashed border-border-default px-3 py-4 text-center text-xs text-text-tertiary">暂无启用的 MCP 工具</p>
+                  <p v-if="mcpError" class="mt-3 rounded-card bg-red-50 px-3 py-2 text-xs text-red-700">{{ mcpError }}</p>
                 </div>
 
                 <UiButton variant="primary" full-width class="mt-4" @click="newSession">

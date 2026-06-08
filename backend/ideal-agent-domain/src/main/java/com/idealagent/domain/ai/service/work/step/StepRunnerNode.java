@@ -41,9 +41,17 @@ public class StepRunnerNode extends StepNodeSupport {
     private void executeStep(ExecuteRequestEntity request, ExecuteContext context, WorkEventSink sink, AiFlowVO flow, String inspectorResponse, String plannerStep, int step, int maxRetry) {
         Exception lastError = null;
         for (int attempt = 1; attempt <= maxRetry; attempt++) {
+            String response;
+            String stepPrompt = enrichPlannerStep(context, plannerStep);
+            String prompt = flow.getUserPrompt().formatted(request.getUserMessage(), inspectorResponse, stepPrompt);
             try {
-                String prompt = flow.getUserPrompt().formatted(request.getUserMessage(), inspectorResponse, plannerStep);
-                JsonNode result = parser.parseObject(call(flow, prompt, request));
+                response = requiresMcpTools(plannerStep) ? callWithToolsNamedIn(flow, prompt, request, plannerStep) : callWithoutTools(flow, prompt, request);
+            } catch (Exception e) {
+                emitException(sink, RUNNER, e, step, request.getSessionId());
+                return;
+            }
+            try {
+                JsonNode result = parser.parseObject(response);
                 String status = text(result, RUNNER_STATUS);
                 String runnerResult = text(result, RUNNER_RESULT);
                 if ("FAIL".equalsIgnoreCase(status)) {
@@ -63,5 +71,40 @@ public class StepRunnerNode extends StepNodeSupport {
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asText();
+    }
+
+    private String enrichPlannerStep(ExecuteContext context, String plannerStep) {
+        String history = context.getExecutionHistory().isEmpty() ? "[暂无已完成步骤]" : context.getExecutionHistory().toString();
+        return """
+                【当前执行步骤】
+                %s
+                【已完成步骤执行结果】
+                %s
+                【执行边界】
+                只执行当前执行步骤，不执行、不评价、不汇报后续步骤；如果当前步骤依赖前序结果，必须使用已完成步骤执行结果作为输入。
+                """.formatted(plannerStep, history);
+    }
+
+    private boolean requiresMcpTools(String plannerStep) {
+        try {
+            JsonNode step = parser.parseObject(plannerStep);
+            JsonNode mcp = step.get("step_mcp");
+            if (mcp == null || mcp.isNull()) {
+                return true;
+            }
+            String value = mcp.asText("").trim().toLowerCase();
+            if (value.isBlank()) {
+                return false;
+            }
+            return !(value.contains("无需工具")
+                    || value.contains("不需要工具")
+                    || value.contains("无需调用")
+                    || value.contains("no tool")
+                    || value.equals("none")
+                    || value.equals("null")
+                    || value.equals("无"));
+        } catch (Exception ignored) {
+            return true;
+        }
     }
 }

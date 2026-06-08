@@ -1,23 +1,32 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { clearToken, getStoredProfile } from '../utils/auth'
+import { clearToken, getStoredProfile, isAdmin } from '../utils/auth'
 
 const route = useRoute()
 const router = useRouter()
 const profile = computed(() => getStoredProfile())
 
-const navItems = [
+const baseNavItems = [
   { path: '/welcome', label: 'Welcome', description: '仪表盘' },
   { path: '/chat', label: 'Chat', description: '对话会话' },
   { path: '/work', label: 'Work', description: '智能体任务' },
-  { path: '/agents', label: 'Agent', description: '编排管理' },
+  { path: '/agent-display', label: 'Agent 展示', description: '只读观看' },
+  { path: '/mcp-display', label: 'MCP 展示', description: '工具目录' }
+]
+const adminNavItems = [
+  { path: '/agents', label: 'Agent 管理', description: '编排管理', activePrefix: '/agents' },
   { path: '/config', label: 'Config', description: '配置管理' }
 ]
+const navItems = computed(() => isAdmin() ? [...baseNavItems, ...adminNavItems] : baseNavItems)
 
 function logout() {
   clearToken()
   router.push('/auth')
+}
+
+function isActive(item) {
+  return route.path === item.path || (item.activePrefix && route.path.startsWith(`${item.activePrefix}/`))
 }
 </script>
 
@@ -40,9 +49,9 @@ function logout() {
       <RouterLink
         v-for="item in navItems"
         :key="item.path"
-        :to="item.path"
-        class="group relative flex items-center gap-3 rounded-card-md px-4 py-3 transition-all duration-200 ease-smooth"
-        :class="route.path === item.path
+          :to="item.path"
+          class="group relative flex items-center gap-3 rounded-card-md px-4 py-3 transition-all duration-200 ease-smooth"
+          :class="isActive(item)
           ? 'bg-white/10 text-white'
           : 'text-white/60 hover:text-white hover:bg-white/5'
         "
@@ -50,7 +59,7 @@ function logout() {
         <!-- Active indicator line -->
         <div
           class="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-accent transition-all duration-200 ease-out"
-          :class="route.path === item.path ? 'opacity-100 scale-100' : 'opacity-0 scale-0 group-hover:opacity-50 group-hover:scale-100'"
+          :class="isActive(item) ? 'opacity-100 scale-100' : 'opacity-0 scale-0 group-hover:opacity-50 group-hover:scale-100'"
         />
         <div class="flex flex-col">
           <span class="text-sm font-semibold">{{ item.label }}</span>

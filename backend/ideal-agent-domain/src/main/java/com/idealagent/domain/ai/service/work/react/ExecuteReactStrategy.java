@@ -81,7 +81,7 @@ public class ExecuteReactStrategy implements IExecuteStrategy {
             ChatClient client = armory.resolve(flow.getClientId());
             JsonNode node;
             try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
-                node = parser.parseObject(chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, request.getRagTag(), "work"), tools.toolCallbackProvider()));
+                node = parser.parseObject(chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, null, "work"), tools.toolCallbackProvider()));
             }
             node.fields().forEachRemaining(entry -> sink.message(response(role, entry.getKey(), entry.getValue().asText(), request.getSessionId(), pace)));
             return node;

@@ -122,6 +122,16 @@ public class AiController implements IAiApi {
         return Result.success(workService.listAgents());
     }
 
+    @GetMapping("/work/sessions")
+    public Result<List<ChatSessionVO>> workSessions() {
+        return Result.success(workService.listSessions(UserContext.userId()));
+    }
+
+    @GetMapping("/work/messages/{sessionId}")
+    public Result<List<ChatMessageVO>> workMessages(@PathVariable String sessionId) {
+        return Result.success(workService.listMessages(UserContext.userId(), sessionId));
+    }
+
     @GetMapping("/chat/sessions")
     public Result<List<ChatSessionVO>> sessions() {
         return Result.success(chatService.listSessions(UserContext.userId()));

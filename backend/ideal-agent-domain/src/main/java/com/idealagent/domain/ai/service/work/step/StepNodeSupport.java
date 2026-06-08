@@ -13,7 +13,12 @@ import com.idealagent.domain.ai.service.work.WorkEventSink;
 import com.idealagent.domain.ai.service.work.WorkException;
 import com.idealagent.domain.ai.service.work.WorkJsonParser;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.List;
 
 abstract class StepNodeSupport {
     protected final IChatClientArmory armory;
@@ -41,8 +46,32 @@ abstract class StepNodeSupport {
     protected String call(AiFlowVO flow, String prompt, ExecuteRequestEntity request) {
         ChatClient client = armory.resolve(flow.getClientId());
         try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
-            return chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, request.getRagTag(), "work"), tools.toolCallbackProvider());
+            return chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, null, "work"), tools.toolCallbackProvider());
         }
+    }
+
+    protected String callWithoutTools(AiFlowVO flow, String prompt, ExecuteRequestEntity request) {
+        ChatClient client = armory.resolve(flow.getClientId());
+        return chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, null, "work"), null);
+    }
+
+    protected String callWithToolsNamedIn(AiFlowVO flow, String prompt, ExecuteRequestEntity request, String toolPlan) {
+        ChatClient client = armory.resolve(flow.getClientId());
+        try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
+            ToolCallbackProvider provider = filterTools(tools.toolCallbackProvider(), toolPlan);
+            return chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, null, "work"), provider);
+        }
+    }
+
+    private ToolCallbackProvider filterTools(ToolCallbackProvider provider, String toolPlan) {
+        if (provider == null || !StringUtils.hasText(toolPlan)) {
+            return null;
+        }
+        List<ToolCallback> callbacks = Arrays.stream(provider.getToolCallbacks())
+                .filter(callback -> callback.getToolDefinition() != null)
+                .filter(callback -> toolPlan.contains(callback.getToolDefinition().name()))
+                .toList();
+        return callbacks.isEmpty() ? null : ToolCallbackProvider.from(callbacks);
     }
 
     protected void emit(WorkEventSink sink, String sectionType, String content, Integer step, String sessionId) {

@@ -13,6 +13,7 @@ public class AiConfigData {
     private Long ownerId;
     private String ownerType;
     private String configType;
+    private Integer timeoutMinutes;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 
@@ -94,6 +95,14 @@ public class AiConfigData {
 
     public void setConfigType(String configType) {
         this.configType = configType;
+    }
+
+    public Integer getTimeoutMinutes() {
+        return timeoutMinutes;
+    }
+
+    public void setTimeoutMinutes(Integer timeoutMinutes) {
+        this.timeoutMinutes = timeoutMinutes;
     }
 
     public LocalDateTime getCreateTime() {

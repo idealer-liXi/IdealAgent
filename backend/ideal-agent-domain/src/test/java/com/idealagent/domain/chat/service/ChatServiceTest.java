@@ -68,7 +68,8 @@ class ChatServiceTest {
         assertThat(augmentService.lastUserId).isEqualTo(7L);
         assertThat(augmentService.lastUserMessage).isEqualTo("你好");
         assertThat(mcpToolService.lastUserId).isEqualTo(7L);
-        assertThat(mcpToolService.lastClientId).isEqualTo("client_default_chat");
+        assertThat(mcpToolService.lastClientId).isNull();
+        assertThat(mcpToolService.lastMcpIds).isEmpty();
         assertThat(chatGateway.lastToolProvider).isSameAs(mcpToolService.handle.toolCallbackProvider());
         assertThat(mcpToolService.handle.closed).isTrue();
         assertThat(chatGateway.lastMessages).extracting(Message::getText).containsExactly("你好");
@@ -80,6 +81,16 @@ class ChatServiceTest {
         chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "怎么存向量？", "spring-ai"));
 
         assertThat(augmentService.lastRagTag).isEqualTo("spring-ai");
+    }
+
+    @Test
+    void sendUsesRequestMcpIdsInsteadOfClientBindings() {
+        chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "查天气", null, List.of("mcp_weather", "mcp_map")));
+
+        assertThat(mcpToolService.lastUserId).isEqualTo(7L);
+        assertThat(mcpToolService.lastClientId).isNull();
+        assertThat(mcpToolService.lastMcpIds).containsExactly("mcp_weather", "mcp_map");
+        assertThat(chatGateway.lastToolProvider).isSameAs(mcpToolService.handle.toolCallbackProvider());
     }
 
     @Test
@@ -127,26 +138,27 @@ class ChatServiceTest {
     }
 
     @Test
-    void sendDoesNotUseRagAdvisorTagWhenRequestHasNoRagTag() {
+    void sendIgnoresRagAdvisorWhenRequestHasNoRagTag() {
         configRepository.add(ConfigKind.CONFIG, configBinding("config_rag", "client_default_chat", "advisor", "advisor_rag", 1));
-        configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_rag", "Rag", "{\"ragTag\":\"project-docs\",\"topK\":4}", 1));
+        configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_rag", "Rag", "{\"topK\":4,\"filterExpression\":\"knowledge == 'project-docs'\"}", 1));
 
         chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "介绍项目"));
 
         assertThat(augmentService.lastRagTag).isNull();
         assertThat(augmentService.lastTopK).isNull();
+        assertThat(augmentService.lastFilterExpression).isNull();
     }
 
     @Test
-    void sendAppliesRagAdvisorTopKWhenRequestHasRagTag() {
+    void sendUsesRequestRagTagWithoutClientAdvisorSettings() {
         configRepository.add(ConfigKind.CONFIG, configBinding("config_rag", "client_default_chat", "advisor", "advisor_rag", 1));
         configRepository.add(ConfigKind.ADVISOR, advisorRecord("advisor_rag", "Rag", "{\"topK\":4,\"filterExpression\":\"source == 'note.md'\"}", 1));
 
         chatService.send(7L, new ChatRequestDTO(null, "client_default_chat", "介绍项目", "request-docs"));
 
         assertThat(augmentService.lastRagTag).isEqualTo("request-docs");
-        assertThat(augmentService.lastTopK).isEqualTo(4);
-        assertThat(augmentService.lastFilterExpression).isEqualTo("source == 'note.md'");
+        assertThat(augmentService.lastTopK).isNull();
+        assertThat(augmentService.lastFilterExpression).isNull();
     }
 
     @Test
@@ -172,12 +184,14 @@ class ChatServiceTest {
     @Test
     void listClientsReturnsEnabledClientOptions() {
         configRepository.add(ConfigKind.CLIENT, clientRecord("client_default_chat", "Default Chat", "chat", "model_default_chat", "gpt-4o-mini", 1));
+        configRepository.add(ConfigKind.CLIENT, clientRecord("client_runner", "Runner", "work", "model_default_chat", "gpt-4o-mini", 1));
         configRepository.add(ConfigKind.CLIENT, clientRecord("client_disabled", "Disabled", "chat", "model_disabled", "gpt-disabled", 0));
 
         List<ChatClientOptionVO> clients = chatService.listClients();
 
         assertThat(clients).hasSize(1);
         assertThat(clients.get(0).clientId()).isEqualTo("client_default_chat");
+        assertThat(clients.get(0).clientType()).isEqualTo("chat");
         assertThat(clients.get(0).clientName()).isEqualTo("Default Chat");
         assertThat(clients.get(0).modelId()).isEqualTo("model_default_chat");
         assertThat(clients.get(0).modelName()).isEqualTo("gpt-4o-mini");
@@ -375,12 +389,22 @@ class ChatServiceTest {
     private static class RecordingMcpToolService implements IMcpToolService {
         private Long lastUserId;
         private String lastClientId;
+        private List<String> lastMcpIds;
         private final RecordingMcpToolHandle handle = new RecordingMcpToolHandle();
 
         @Override
         public McpToolHandle augmentMcpTool(Long userId, String clientId) {
             lastUserId = userId;
             lastClientId = clientId;
+            lastMcpIds = null;
+            return handle;
+        }
+
+        @Override
+        public McpToolHandle augmentMcpTool(Long userId, List<String> mcpIds) {
+            lastUserId = userId;
+            lastClientId = null;
+            lastMcpIds = mcpIds;
             return handle;
         }
     }

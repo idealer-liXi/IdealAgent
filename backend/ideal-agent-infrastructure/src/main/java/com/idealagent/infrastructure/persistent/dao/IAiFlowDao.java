@@ -12,13 +12,13 @@ public interface IAiFlowDao {
 
     List<AiFlow> listByAgentId(@Param("agentId") String agentId);
 
-    AiFlow queryByFlowId(@Param("flowId") String flowId);
+    AiFlow queryByAgentIdAndClientId(@Param("agentId") String agentId, @Param("clientId") String clientId);
 
     int insert(AiFlow flow);
 
-    int update(AiFlow flow);
+    int update(@Param("originAgentId") String originAgentId, @Param("originClientId") String originClientId, @Param("flow") AiFlow flow);
 
-    int updateStatus(@Param("flowId") String flowId, @Param("status") Integer status);
+    int deleteByAgentIdAndClientId(@Param("agentId") String agentId, @Param("clientId") String clientId);
 
-    int delete(@Param("flowId") String flowId);
+    int deleteByAgentId(@Param("agentId") String agentId);
 }

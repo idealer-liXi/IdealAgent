@@ -1,9 +1,12 @@
 package com.idealagent;
 
 import com.idealagent.config.WebMvcConfig;
+import com.idealagent.domain.ai.model.dto.CanvasRelationDTO;
 import com.idealagent.domain.ai.model.dto.FlowManageDTO;
 import com.idealagent.domain.ai.model.vo.AgentManageVO;
+import com.idealagent.domain.ai.model.vo.CanvasGraphVO;
 import com.idealagent.domain.ai.model.vo.FlowManageVO;
+import com.idealagent.domain.ai.service.agent.AdminCanvasService;
 import com.idealagent.domain.ai.service.agent.AgentManagementService;
 import com.idealagent.domain.user.model.vo.AuthUserVO;
 import com.idealagent.domain.user.service.auth.ITokenParser;
@@ -20,9 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -38,10 +41,79 @@ class AiAgentControllerTest {
     private AgentManagementService agentManagementService;
 
     @MockitoBean
+    private AdminCanvasService adminCanvasService;
+
+    @MockitoBean
     private ITokenParser tokenParser;
 
     @Test
     void agentsReturnsManagedAgents() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "admin"));
+        when(agentManagementService.listAgents()).thenReturn(List.of(new AgentManageVO(
+                "agent_custom_step", "Custom Step", "step", "desc", "", "", 1)));
+
+        mockMvc.perform(get("/ai/admin/agents").header("Authorization", "Bearer token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].agentId").value("agent_custom_step"));
+    }
+
+    @Test
+    void createsAdminFlow() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "admin"));
+        when(agentManagementService.createFlow(any(FlowManageDTO.class))).thenReturn(new FlowManageVO(
+                "agent_custom_step", "client_planner", "planner", "Plan %s", 2));
+
+        mockMvc.perform(post("/ai/admin/flows")
+                        .header("Authorization", "Bearer token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"agentId\":\"agent_custom_step\",\"clientId\":\"client_planner\",\"clientRole\":\"planner\",\"userPrompt\":\"Plan %s\",\"flowSeq\":2}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.clientRole").value("planner"));
+
+        verify(agentManagementService).createFlow(any(FlowManageDTO.class));
+    }
+
+    @Test
+    void deletesAdminFlowByCompositeKey() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "admin"));
+
+        mockMvc.perform(delete("/ai/admin/flows")
+                        .header("Authorization", "Bearer token-1")
+                        .param("agentId", "agent_custom_step")
+                        .param("clientId", "client_planner"))
+                .andExpect(status().isOk());
+
+        verify(agentManagementService).deleteFlow("agent_custom_step", "client_planner");
+    }
+
+    @Test
+    void returnsAdminCanvasGraph() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "admin"));
+        when(adminCanvasService.graph("agent_custom_step")).thenReturn(new CanvasGraphVO(
+                new AgentManageVO("agent_custom_step", "Custom Step", "step", "desc", "", "", 1),
+                List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()));
+
+        mockMvc.perform(get("/ai/admin/canvas/agent_custom_step")
+                        .header("Authorization", "Bearer token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.agent.agentId").value("agent_custom_step"));
+    }
+
+    @Test
+    void savesAdminCanvasRelation() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "admin"));
+
+        mockMvc.perform(post("/ai/admin/canvas/relation")
+                        .header("Authorization", "Bearer token-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"sourceType\":\"client\",\"targetType\":\"prompt\",\"sourceId\":\"client_planner\",\"targetId\":\"prompt_system\",\"agentId\":\"agent_custom_step\",\"configType\":\"prompt\"}"))
+                .andExpect(status().isOk());
+
+        verify(adminCanvasService).saveRelation(any(CanvasRelationDTO.class));
+    }
+
+    @Test
+    void publicAgentsListIsVisibleToNormalUsers() throws Exception {
         when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "user"));
         when(agentManagementService.listAgents()).thenReturn(List.of(new AgentManageVO(
                 "agent_custom_step", "Custom Step", "step", "desc", "", "", 1)));
@@ -52,18 +124,20 @@ class AiAgentControllerTest {
     }
 
     @Test
-    void createFlowDelegatesToService() throws Exception {
+    void rejectsNonAdminAgentManagementAccess() throws Exception {
         when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "user"));
-        when(agentManagementService.createFlow(any(FlowManageDTO.class))).thenReturn(new FlowManageVO(
-                "flow_custom_planner", "agent_custom_step", "client_default_chat", "planner", 2, "prompt_step_planner", "Plan prompt", 1));
 
-        mockMvc.perform(post("/ai/flows")
-                        .header("Authorization", "Bearer token-1")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"flowId\":\"flow_custom_planner\",\"agentId\":\"agent_custom_step\",\"clientId\":\"client_default_chat\",\"roleType\":\"planner\",\"sortOrder\":2,\"promptId\":\"prompt_step_planner\",\"status\":1}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.flowId").value("flow_custom_planner"));
+        mockMvc.perform(get("/ai/admin/agents").header("Authorization", "Bearer token-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("0001"));
+    }
 
-        verify(agentManagementService).createFlow(any(FlowManageDTO.class));
+    @Test
+    void rejectsNonAdminLegacyFlowAccess() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "user"));
+
+        mockMvc.perform(get("/ai/agents/agent_custom_step/flows").header("Authorization", "Bearer token-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("0001"));
     }
 }

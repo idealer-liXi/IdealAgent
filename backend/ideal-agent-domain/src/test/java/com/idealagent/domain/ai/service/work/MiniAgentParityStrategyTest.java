@@ -42,7 +42,7 @@ class MiniAgentParityStrategyTest {
         new ExecuteLoopStrategy(new FakeRepository(), new FakeArmory(), mcpToolService, gateway, new WorkJsonParser(), messageBuilder).execute(request("loop"), sink);
 
         assertThat(gateway.prompts).hasSize(4);
-        assertThat(messageBuilder.ragTags).containsExactly("agent-docs", "agent-docs", "agent-docs", "agent-docs");
+        assertThat(messageBuilder.ragTags).containsExactly(null, null, null, null);
         assertThat(mcpToolService.clientIds).containsExactly("client_analyzer", "client_performer", "client_supervisor", "client_summarizer");
         assertThat(mcpToolService.userIds).containsExactly(7L, 7L, 7L, 7L);
         assertThat(mcpToolService.closedCount).isEqualTo(4);
@@ -67,7 +67,7 @@ class MiniAgentParityStrategyTest {
         new ExecuteReactStrategy(new FakeRepository(), new FakeArmory(), mcpToolService, gateway, new WorkJsonParser(), messageBuilder).execute(request("react"), sink);
 
         assertThat(gateway.prompts).hasSize(5);
-        assertThat(messageBuilder.ragTags).containsExactly("agent-docs", "agent-docs", "agent-docs", "agent-docs", "agent-docs");
+        assertThat(messageBuilder.ragTags).containsExactly(null, null, null, null, null);
         assertThat(mcpToolService.clientIds).containsExactly("client_observer", "client_reasoner", "client_actor", "client_observer", "client_evaluator");
         assertThat(mcpToolService.closedCount).isEqualTo(5);
         assertThat(gateway.toolCallbackProviders).hasSize(5);

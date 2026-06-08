@@ -62,8 +62,26 @@ class AiConfigRepositoryTest {
         assertThat(repository.list(ConfigKind.API)).isEmpty();
     }
 
+    @Test
+    void listMcpIncludesTimeoutColumnInRuntimeConfig() {
+        AiConfigRecord record = new AiConfigRecord();
+        record.setConfigId("mcp_email");
+        record.setName("Email");
+        record.setType("sse");
+        record.setContent("{\"baseUri\":\"http://localhost:9004\",\"sseEndpoint\":\"/sse\",\"timeoutMinutes\":8}");
+        record.setSecret("secret");
+        record.setStatus(1);
+        record.setOwnerId(0L);
+
+        repository.save(ConfigKind.MCP, record);
+
+        AiConfigRecord loaded = repository.list(ConfigKind.MCP).get(0);
+        assertThat(com.idealagent.domain.ai.model.entity.McpServerConfig.parse(loaded.getContent()).timeoutMinutes()).isEqualTo(8);
+    }
+
     private static class FakeAiConfigDao implements IAiConfigDao {
         private final List<AiConfigData> apis = new ArrayList<>();
+        private final List<AiConfigData> mcps = new ArrayList<>();
 
         @Override
         public int insertApi(AiConfigData record) {
@@ -197,26 +215,31 @@ class AiConfigRepositoryTest {
 
         @Override
         public int insertMcp(AiConfigData record) {
+            mcps.add(record);
             return 1;
         }
 
         @Override
         public List<AiConfigData> listMcps() {
-            return List.of();
+            return mcps;
         }
 
         @Override
         public int updateMcp(AiConfigData record) {
+            mcps.removeIf(item -> item.getConfigId().equals(record.getConfigId()));
+            mcps.add(record);
             return 1;
         }
 
         @Override
         public int updateMcpStatus(String configId, Integer status) {
+            mcps.stream().filter(item -> item.getConfigId().equals(configId)).forEach(item -> item.setStatus(status));
             return 1;
         }
 
         @Override
         public int deleteMcp(String configId) {
+            mcps.removeIf(item -> item.getConfigId().equals(configId));
             return 1;
         }
 

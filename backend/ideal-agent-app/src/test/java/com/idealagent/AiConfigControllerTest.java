@@ -45,7 +45,7 @@ class AiConfigControllerTest {
 
     @Test
     void createApiConfigurationRequiresLoginAndReturnsRecord() throws Exception {
-        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "admin"));
         when(aiConfigService.create(eq(ConfigKind.API), any(AiConfigRecordDTO.class)))
                 .thenReturn(new AiConfigRecordVO("api_openai", "OpenAI", "openai", "https://api.openai.com", "sk-test", null, 1, 0L, null, null, null, null));
 
@@ -60,7 +60,7 @@ class AiConfigControllerTest {
 
     @Test
     void listModelConfigurationsReturnsRecords() throws Exception {
-        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "admin"));
         when(aiConfigService.list(ConfigKind.MODEL))
                 .thenReturn(List.of(new AiConfigRecordVO("model_gpt", "GPT", "chat", null, null, "api_openai", 1, 0L, null, null, null, null)));
 
@@ -72,7 +72,7 @@ class AiConfigControllerTest {
 
     @Test
     void updateApiConfigurationReturnsRecord() throws Exception {
-        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "admin"));
         when(aiConfigService.update(eq(ConfigKind.API), eq("api_deepseek"), any(AiConfigRecordDTO.class)))
                 .thenReturn(new AiConfigRecordVO("api_deepseek", "DeepSeek", "openai", "https://api.deepseek.com", "sk-test", null, 1, 0L, null, null, null, null));
 
@@ -86,7 +86,7 @@ class AiConfigControllerTest {
 
     @Test
     void updateStatusAndDeleteConfiguration() throws Exception {
-        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "admin"));
 
         mockMvc.perform(patch("/ai/config/client/client_chat/status")
                         .header("Authorization", "Bearer token-1")
@@ -99,5 +99,15 @@ class AiConfigControllerTest {
                         .header("Authorization", "Bearer token-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value("0000"));
+    }
+
+    @Test
+    void rejectsNonAdminConfigAccess() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(1L, "alice", "user"));
+
+        mockMvc.perform(get("/ai/config/model")
+                        .header("Authorization", "Bearer token-1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("0001"));
     }
 }

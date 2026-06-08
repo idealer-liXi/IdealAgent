@@ -7,6 +7,7 @@ import com.idealagent.domain.ai.service.config.AiConfigException;
 import com.idealagent.domain.ai.service.mcp.McpException;
 import com.idealagent.domain.ai.service.rag.RagException;
 import com.idealagent.domain.ai.service.work.WorkException;
+import com.idealagent.trigger.exception.ForbiddenException;
 import com.idealagent.types.result.Result;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -19,6 +20,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AuthException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Result<Void> handleAuthException(AuthException e) {
+        return Result.failure(e.getMessage());
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> handleForbiddenException(ForbiddenException e) {
         return Result.failure(e.getMessage());
     }
 

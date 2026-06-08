@@ -1,22 +1,11 @@
 package com.idealagent.infrastructure.persistent.po;
 
 public class AiFlow {
-    private String flowId;
     private String agentId;
     private String clientId;
-    private String roleType;
-    private Integer sortOrder;
-    private Integer flowStatus;
-    private String promptId;
-    private String promptContent;
-
-    public String getFlowId() {
-        return flowId;
-    }
-
-    public void setFlowId(String flowId) {
-        this.flowId = flowId;
-    }
+    private String clientRole;
+    private String userPrompt;
+    private Integer flowSeq;
 
     public String getAgentId() {
         return agentId;
@@ -34,43 +23,27 @@ public class AiFlow {
         this.clientId = clientId;
     }
 
-    public String getRoleType() {
-        return roleType;
+    public String getClientRole() {
+        return clientRole;
     }
 
-    public void setRoleType(String roleType) {
-        this.roleType = roleType;
+    public void setClientRole(String clientRole) {
+        this.clientRole = clientRole;
     }
 
-    public Integer getSortOrder() {
-        return sortOrder;
+    public String getUserPrompt() {
+        return userPrompt;
     }
 
-    public void setSortOrder(Integer sortOrder) {
-        this.sortOrder = sortOrder;
+    public void setUserPrompt(String userPrompt) {
+        this.userPrompt = userPrompt;
     }
 
-    public Integer getFlowStatus() {
-        return flowStatus;
+    public Integer getFlowSeq() {
+        return flowSeq;
     }
 
-    public void setFlowStatus(Integer flowStatus) {
-        this.flowStatus = flowStatus;
-    }
-
-    public String getPromptId() {
-        return promptId;
-    }
-
-    public void setPromptId(String promptId) {
-        this.promptId = promptId;
-    }
-
-    public String getPromptContent() {
-        return promptContent;
-    }
-
-    public void setPromptContent(String promptContent) {
-        this.promptContent = promptContent;
+    public void setFlowSeq(Integer flowSeq) {
+        this.flowSeq = flowSeq;
     }
 }

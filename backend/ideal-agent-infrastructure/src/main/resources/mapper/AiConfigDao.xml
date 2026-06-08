@@ -12,6 +12,7 @@
         <result column="owner_id" property="ownerId"/>
         <result column="owner_type" property="ownerType"/>
         <result column="config_type" property="configType"/>
+        <result column="timeout_minutes" property="timeoutMinutes"/>
         <result column="create_time" property="createTime"/>
         <result column="update_time" property="updateTime"/>
     </resultMap>
@@ -147,20 +148,20 @@
     </delete>
 
     <insert id="insertMcp" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
-        INSERT INTO ai_mcp (mcp_id, mcp_name, mcp_type, mcp_config, mcp_secret, mcp_status, mcp_from)
-        VALUES (#{configId}, #{name}, #{type}, #{content}, #{secret}, #{status}, #{ownerId})
+        INSERT INTO ai_mcp (mcp_id, mcp_name, mcp_type, mcp_config, mcp_secret, mcp_timeout, mcp_status, mcp_from)
+        VALUES (#{configId}, #{name}, #{type}, #{content}, #{secret}, COALESCE(#{timeoutMinutes}, 3), #{status}, #{ownerId})
     </insert>
 
     <select id="listMcps" resultMap="dataMap">
         SELECT mcp_id AS config_id, mcp_name AS name, mcp_type AS type, mcp_config AS content,
-               mcp_secret AS secret, NULL AS ref_id, mcp_status AS status, mcp_from AS owner_id,
-               NULL AS owner_type, NULL AS config_type, create_time, update_time
+                mcp_secret AS secret, NULL AS ref_id, mcp_status AS status, mcp_from AS owner_id,
+                NULL AS owner_type, NULL AS config_type, mcp_timeout AS timeout_minutes, create_time, update_time
         FROM ai_mcp
         ORDER BY id DESC
     </select>
 
     <update id="updateMcp" parameterType="com.idealagent.infrastructure.persistent.po.AiConfigData">
-        UPDATE ai_mcp SET mcp_name = #{name}, mcp_type = #{type}, mcp_config = #{content}, mcp_secret = #{secret}, mcp_status = #{status}, mcp_from = #{ownerId}
+        UPDATE ai_mcp SET mcp_name = #{name}, mcp_type = #{type}, mcp_config = #{content}, mcp_secret = #{secret}, mcp_timeout = COALESCE(#{timeoutMinutes}, mcp_timeout), mcp_status = #{status}, mcp_from = #{ownerId}
         WHERE mcp_id = #{configId}
     </update>
 

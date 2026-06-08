@@ -4,6 +4,7 @@ import com.idealagent.domain.ai.model.dto.AgentManageDTO;
 import com.idealagent.domain.ai.model.dto.FlowManageDTO;
 import com.idealagent.domain.ai.model.vo.AgentManageVO;
 import com.idealagent.domain.ai.model.vo.AiConfigRecordVO;
+import com.idealagent.domain.ai.model.vo.CanvasGraphVO;
 import com.idealagent.domain.ai.model.vo.FlowManageVO;
 import com.idealagent.domain.ai.model.vo.FlowOptionsVO;
 import com.idealagent.domain.ai.repository.IAgentManagementRepository;
@@ -14,14 +15,13 @@ import com.idealagent.infrastructure.persistent.po.AiAgent;
 import com.idealagent.infrastructure.persistent.po.AiConfigData;
 import com.idealagent.infrastructure.persistent.po.AiFlow;
 import org.springframework.stereotype.Repository;
-import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Repository
 public class AgentManagementRepository implements IAgentManagementRepository {
-    private static final String FLOW_OWNER = "flow";
-    private static final String PROMPT_CONFIG = "prompt";
     private final IAiAgentDao agentDao;
     private final IAiFlowDao flowDao;
     private final IAiConfigDao configDao;
@@ -70,33 +70,25 @@ public class AgentManagementRepository implements IAgentManagementRepository {
     }
 
     @Override
-    public FlowManageVO findFlow(String flowId) {
-        return toFlowVo(flowDao.queryByFlowId(flowId));
+    public FlowManageVO findFlow(String agentId, String clientId) {
+        return toFlowVo(flowDao.queryByAgentIdAndClientId(agentId, clientId));
     }
 
     @Override
     public FlowManageVO saveFlow(FlowManageDTO request) {
         flowDao.insert(toFlowPo(request));
-        savePromptBinding(request.flowId(), request.promptId());
         return toFlowVo(toFlowPo(request));
     }
 
     @Override
-    public FlowManageVO updateFlow(String flowId, FlowManageDTO request) {
-        flowDao.update(toFlowPo(request));
-        savePromptBinding(flowId, request.promptId());
+    public FlowManageVO updateFlow(String originAgentId, String originClientId, FlowManageDTO request) {
+        flowDao.update(originAgentId, originClientId, toFlowPo(request));
         return toFlowVo(toFlowPo(request));
     }
 
     @Override
-    public void updateFlowStatus(String flowId, Integer status) {
-        flowDao.updateStatus(flowId, status);
-    }
-
-    @Override
-    public void deleteFlow(String flowId) {
-        configDao.deleteConfigByOwner(flowId, FLOW_OWNER, PROMPT_CONFIG);
-        flowDao.delete(flowId);
+    public void deleteFlow(String agentId, String clientId) {
+        flowDao.deleteByAgentIdAndClientId(agentId, clientId);
     }
 
     @Override
@@ -107,19 +99,18 @@ public class AgentManagementRepository implements IAgentManagementRepository {
                 configDao.listMcps().stream().map(this::toConfigVo).toList());
     }
 
-    private void savePromptBinding(String flowId, String promptId) {
-        configDao.deleteConfigByOwner(flowId, FLOW_OWNER, PROMPT_CONFIG);
-        if (!StringUtils.hasText(promptId)) {
-            return;
-        }
-        AiConfigData binding = new AiConfigData();
-        binding.setConfigId("config_" + flowId + "_prompt");
-        binding.setContent(flowId);
-        binding.setOwnerType(FLOW_OWNER);
-        binding.setConfigType(PROMPT_CONFIG);
-        binding.setRefId(promptId);
-        binding.setStatus(1);
-        configDao.insertConfig(binding);
+    @Override
+    public CanvasGraphVO canvasGraph(String agentId) {
+        return new CanvasGraphVO(
+                findAgent(agentId),
+                listFlows(agentId),
+                configDao.listClients().stream().map(this::toCanvasMap).toList(),
+                configDao.listModels().stream().map(this::toCanvasMap).toList(),
+                configDao.listApis().stream().map(this::toCanvasMap).toList(),
+                configDao.listPrompts().stream().map(this::toCanvasMap).toList(),
+                configDao.listAdvisors().stream().map(this::toCanvasMap).toList(),
+                configDao.listMcps().stream().map(this::toCanvasMap).toList(),
+                configDao.listConfigs().stream().map(this::toCanvasMap).toList());
     }
 
     private AiAgent toAgentPo(AgentManageDTO request) {
@@ -144,13 +135,11 @@ public class AgentManagementRepository implements IAgentManagementRepository {
 
     private AiFlow toFlowPo(FlowManageDTO request) {
         AiFlow flow = new AiFlow();
-        flow.setFlowId(request.flowId());
         flow.setAgentId(request.agentId());
         flow.setClientId(request.clientId());
-        flow.setRoleType(request.roleType());
-        flow.setSortOrder(request.sortOrder());
-        flow.setFlowStatus(request.status());
-        flow.setPromptId(request.promptId());
+        flow.setClientRole(request.clientRole());
+        flow.setUserPrompt(request.userPrompt());
+        flow.setFlowSeq(request.flowSeq());
         return flow;
     }
 
@@ -158,10 +147,26 @@ public class AgentManagementRepository implements IAgentManagementRepository {
         if (flow == null) {
             return null;
         }
-        return new FlowManageVO(flow.getFlowId(), flow.getAgentId(), flow.getClientId(), flow.getRoleType(), flow.getSortOrder(), flow.getPromptId(), flow.getPromptContent(), flow.getFlowStatus());
+        return new FlowManageVO(flow.getAgentId(), flow.getClientId(), flow.getClientRole(), flow.getUserPrompt(), flow.getFlowSeq());
     }
 
     private AiConfigRecordVO toConfigVo(AiConfigData record) {
         return new AiConfigRecordVO(record.getConfigId(), record.getName(), record.getType(), record.getContent(), record.getSecret(), record.getRefId(), record.getStatus(), record.getOwnerId(), record.getOwnerType(), record.getConfigType(), record.getCreateTime(), record.getUpdateTime());
     }
+
+    private Map<String, Object> toCanvasMap(AiConfigData record) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("configId", record.getConfigId());
+        map.put("name", record.getName());
+        map.put("type", record.getType());
+        map.put("content", record.getContent());
+        map.put("secret", record.getSecret());
+        map.put("refId", record.getRefId());
+        map.put("status", record.getStatus());
+        map.put("ownerId", record.getOwnerId());
+        map.put("ownerType", record.getOwnerType());
+        map.put("configType", record.getConfigType());
+        return map;
+    }
+
 }

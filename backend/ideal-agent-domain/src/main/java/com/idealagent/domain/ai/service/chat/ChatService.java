@@ -66,7 +66,7 @@ public class ChatService {
         chatRepository.saveMessage(userMessage);
 
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
-        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
+        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, request.mcpIdList())) {
             String assistantContent = chatGateway.complete(runtimeClient, messages, mcpTools.toolCallbackProvider());
             ChatMessage assistantMessage = chatRepository.saveMessage(message(sessionId, ASSISTANT_ROLE, assistantContent));
             return new ChatResponseVO(sessionId, toMessageVo(assistantMessage));
@@ -86,7 +86,7 @@ public class ChatService {
 
         ChatClient runtimeClient = chatDispatchService.dispatchChatClient(clientId);
         StringBuilder assistantContent = new StringBuilder();
-        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, clientId)) {
+        try (McpToolHandle mcpTools = mcpToolService.augmentMcpTool(userId, request.mcpIdList())) {
             chatGateway.stream(runtimeClient, messages, mcpTools.toolCallbackProvider(), delta -> {
                 assistantContent.append(delta);
                 onDelta.accept(delta);
@@ -111,6 +111,7 @@ public class ChatService {
     public List<ChatClientOptionVO> listClients() {
         return aiConfigRepository.list(ConfigKind.CLIENT).stream()
                 .filter(record -> record.getStatus() != null && record.getStatus() == ENABLED)
+                .filter(record -> CHAT_TYPE.equalsIgnoreCase(record.getType()))
                 .map(this::toClientOption)
                 .toList();
     }

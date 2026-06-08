@@ -37,38 +37,29 @@ class AgentManagementRepositoryTest {
     }
 
     @Test
-    void savesFlowAndPromptBinding() {
-        FlowManageVO flow = repository.saveFlow(new FlowManageDTO("flow_custom_planner", "agent_custom_step", "client_default_chat", "planner", 2, "prompt_step_planner", 1));
+    void savesMiniAgentStyleFlow() {
+        FlowManageVO flow = repository.saveFlow(new FlowManageDTO(null, null, "agent_custom_step", "client_planner", "planner", "Plan %s", 2));
 
-        assertThat(flow.flowId()).isEqualTo("flow_custom_planner");
-        assertThat(flow.promptId()).isEqualTo("prompt_step_planner");
+        assertThat(flow.agentId()).isEqualTo("agent_custom_step");
+        assertThat(flow.clientRole()).isEqualTo("planner");
         verify(flowDao).insert(any(AiFlow.class));
-        var captor = forClass(AiConfigData.class);
-        verify(configDao).deleteConfigByOwner("flow_custom_planner", "flow", "prompt");
-        verify(configDao).insertConfig(captor.capture());
-        assertThat(captor.getValue().getConfigId()).isEqualTo("config_flow_custom_planner_prompt");
-        assertThat(captor.getValue().getOwnerType()).isEqualTo("flow");
-        assertThat(captor.getValue().getConfigType()).isEqualTo("prompt");
-        assertThat(captor.getValue().getRefId()).isEqualTo("prompt_step_planner");
     }
 
     @Test
     void listsFlowsWithPromptBinding() {
         AiFlow po = new AiFlow();
-        po.setFlowId("flow_custom_planner");
         po.setAgentId("agent_custom_step");
         po.setClientId("client_default_chat");
-        po.setRoleType("planner");
-        po.setSortOrder(2);
-        po.setFlowStatus(1);
-        po.setPromptId("prompt_step_planner");
-        po.setPromptContent("Plan prompt");
+        po.setClientRole("planner");
+        po.setFlowSeq(2);
+        po.setUserPrompt("Plan prompt");
         when(flowDao.listByAgentId("agent_custom_step")).thenReturn(List.of(po));
 
         List<FlowManageVO> flows = repository.listFlows("agent_custom_step");
 
         assertThat(flows).hasSize(1);
-        assertThat(flows.get(0).promptId()).isEqualTo("prompt_step_planner");
-        assertThat(flows.get(0).promptContent()).isEqualTo("Plan prompt");
+        assertThat(flows.get(0).clientRole()).isEqualTo("planner");
+        assertThat(flows.get(0).userPrompt()).isEqualTo("Plan prompt");
     }
+
 }

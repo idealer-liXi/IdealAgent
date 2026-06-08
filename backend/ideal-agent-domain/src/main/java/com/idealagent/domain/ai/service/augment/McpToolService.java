@@ -44,9 +44,24 @@ public class McpToolService implements IMcpToolService {
             return McpToolHandle.empty();
         }
 
+        return buildTools(userId, bindings.stream().map(AiConfigRecord::getRefId).toList(), clientId);
+    }
+
+    @Override
+    public McpToolHandle augmentMcpTool(Long userId, List<String> mcpIds) {
+        if (mcpIds == null || mcpIds.isEmpty()) {
+            return McpToolHandle.empty();
+        }
+        return buildTools(userId, mcpIds.stream().filter(StringUtils::hasText).distinct().toList(), null);
+    }
+
+    private McpToolHandle buildTools(Long userId, List<String> mcpIds, String clientId) {
+        if (mcpIds == null || mcpIds.isEmpty()) {
+            return McpToolHandle.empty();
+        }
         List<McpSyncClient> clients = new ArrayList<>();
-        for (AiConfigRecord binding : bindings) {
-            AiConfigRecord mcpRecord = aiConfigRepository.find(ConfigKind.MCP, binding.getRefId());
+        for (String mcpId : mcpIds) {
+            AiConfigRecord mcpRecord = aiConfigRepository.find(ConfigKind.MCP, mcpId);
             if (mcpRecord == null) {
                 closeClients(clients);
                 throw new McpException("MCP 配置不存在");
@@ -57,7 +72,7 @@ public class McpToolService implements IMcpToolService {
             try {
                 clients.add(mcpClientArmory.build(mcpRecord, userId));
             } catch (RuntimeException e) {
-                log.warn("MCP 初始化失败，已跳过：clientId={}, bindingId={}, mcpId={}, reason={}", clientId, binding.getConfigId(), mcpRecord.getConfigId(), e.getMessage());
+                log.warn("MCP 初始化失败，已跳过：clientId={}, mcpId={}, reason={}", clientId, mcpRecord.getConfigId(), e.getMessage());
             }
         }
         if (clients.isEmpty()) {

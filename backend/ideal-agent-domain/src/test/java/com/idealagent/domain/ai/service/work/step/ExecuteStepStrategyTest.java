@@ -18,10 +18,13 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.ai.tool.definition.ToolDefinition;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +32,7 @@ import java.util.Queue;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ExecuteStepStrategyTest {
     private FakeRepository repository;
@@ -71,7 +75,7 @@ class ExecuteStepStrategyTest {
         assertThat(mcpToolService.userIds).containsExactly(7L, 7L, 7L, 7L);
         assertThat(mcpToolService.closedCount).isEqualTo(4);
         assertThat(gateway.toolCallbackProviders).hasSize(4);
-        assertThat(messageBuilder.ragTags).containsExactly("work-docs", "work-docs", "work-docs", "work-docs");
+        assertThat(messageBuilder.ragTags).containsExactly(null, null, null, null);
         assertThat(messageBuilder.messageTypes).containsOnly("work");
         assertThat(sink.messages).extracting(ExecuteResponseEntity::getSectionType)
                 .contains("inspector_mcp", "planner_step", "runner_result", "runner_status", "replier_overview");
@@ -92,6 +96,98 @@ class ExecuteStepStrategyTest {
 
         assertThat(gateway.prompts).hasSize(5);
         assertThat(sink.messages).extracting(ExecuteResponseEntity::getSectionType).contains("runner_result", "replier_overview");
+    }
+
+    @Test
+    void retriesRunnerWithMcpToolsSoSlowToolCallsCanComplete() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[{\"step\":\"1\",\"step_mcp\":\"JavaSDKMCPClient_sendEmail({})\"}]");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送但响应格式错误\",\"runner_status\":\"FAIL\"}");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"replier_overview\":\"完成\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(gateway.prompts).hasSize(5);
+        assertThat(mcpToolService.clientIds).containsExactly("client_inspector", "client_planner", "client_runner", "client_runner", "client_replier");
+        assertThat(gateway.toolCallbackProviders.get(2)).isNotNull();
+        assertThat(gateway.toolCallbackProviders.get(3)).isNotNull();
+    }
+
+    @Test
+    void doesNotRetryRunnerWhenToolEnabledCallThrowsBeforeResponse() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[{\"step\":\"1\"}]");
+        gateway.throwAtCall = 3;
+        gateway.responses.add("{\"replier_overview\":\"执行异常\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(gateway.prompts).hasSize(4);
+        assertThat(mcpToolService.clientIds).containsExactly("client_inspector", "client_planner", "client_runner", "client_replier");
+        assertThat(sink.messages).extracting(ExecuteResponseEntity::getSectionType).contains("runner_exception", "replier_overview");
+    }
+
+    @Test
+    void runnerDoesNotExposeMcpToolsForPlannerStepsThatNeedNoTool() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[" +
+                "{\"step_target\":\"查询新闻\",\"step_mcp\":\"JavaSDKMCPClient_webSearch({})\"}," +
+                "{\"step_target\":\"整理HTML\",\"step_mcp\":\"无需工具\"}," +
+                "{\"step_target\":\"发送邮件\",\"step_mcp\":\"JavaSDKMCPClient_sendEmail({})\"}" +
+                "]");
+        gateway.responses.add("{\"runner_result\":\"新闻数据\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"runner_result\":\"HTML内容\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"replier_overview\":\"完成\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(gateway.prompts).hasSize(6);
+        assertThat(mcpToolService.clientIds).containsExactly("client_inspector", "client_planner", "client_runner", "client_runner", "client_replier");
+        assertThat(gateway.toolCallbackProviders.get(2)).isNotNull();
+        assertThat(gateway.toolCallbackProviders.get(3)).isNull();
+        assertThat(gateway.toolCallbackProviders.get(4)).isNotNull();
+    }
+
+    @Test
+    void runnerExposesOnlyToolsNamedByCurrentPlannerStep() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[" +
+                "{\"step_target\":\"查询新闻\",\"step_mcp\":\"JavaSDKMCPClient_webSearch({})\"}," +
+                "{\"step_target\":\"发送邮件\",\"step_mcp\":\"JavaSDKMCPClient_sendEmail({})\"}" +
+                "]");
+        gateway.responses.add("{\"runner_result\":\"新闻数据\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"replier_overview\":\"完成\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(toolNames(gateway.toolCallbackProviders.get(2))).containsExactly("JavaSDKMCPClient_webSearch");
+        assertThat(toolNames(gateway.toolCallbackProviders.get(3))).containsExactly("JavaSDKMCPClient_sendEmail");
+    }
+
+    @Test
+    void runnerPassesPreviousStepResultsToLaterSteps() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[" +
+                "{\"step_target\":\"查询新闻\",\"step_mcp\":\"JavaSDKMCPClient_webSearch({})\"}," +
+                "{\"step_target\":\"发送邮件\",\"step_mcp\":\"JavaSDKMCPClient_sendEmail({})\"}" +
+                "]");
+        gateway.responses.add("{\"runner_result\":\"新闻A、新闻B、新闻C\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"replier_overview\":\"完成\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(gateway.prompts.get(3)).contains("已完成步骤执行结果");
+        assertThat(gateway.prompts.get(3)).contains("新闻A、新闻B、新闻C");
+    }
+
+    private List<String> toolNames(ToolCallbackProvider provider) {
+        return Arrays.stream(provider.getToolCallbacks())
+                .map(callback -> callback.getToolDefinition().name())
+                .toList();
     }
 
     private ExecuteRequestEntity request() {
@@ -155,11 +251,15 @@ class ExecuteStepStrategyTest {
         private final Queue<String> responses = new ArrayDeque<>();
         private final List<String> prompts = new ArrayList<>();
         private final List<ToolCallbackProvider> toolCallbackProviders = new ArrayList<>();
+        private int throwAtCall;
 
         @Override
         public String complete(ChatClient client, String prompt, ToolCallbackProvider toolCallbackProvider) {
             prompts.add(prompt);
             toolCallbackProviders.add(toolCallbackProvider);
+            if (throwAtCall == prompts.size()) {
+                throw new RuntimeException("MCP request timeout");
+            }
             return responses.remove();
         }
 
@@ -167,6 +267,9 @@ class ExecuteStepStrategyTest {
         public String complete(ChatClient client, List<Message> messages, ToolCallbackProvider toolCallbackProvider) {
             prompts.add(messages.get(messages.size() - 1).getText());
             toolCallbackProviders.add(toolCallbackProvider);
+            if (throwAtCall == prompts.size()) {
+                throw new RuntimeException("MCP request timeout");
+            }
             return responses.remove();
         }
     }
@@ -196,12 +299,35 @@ class ExecuteStepStrategyTest {
         public McpToolHandle augmentMcpTool(Long userId, String clientId) {
             userIds.add(userId);
             clientIds.add(clientId);
-            return new McpToolHandle(new SyncMcpToolCallbackProvider(), List.of()) {
+            return new McpToolHandle(new NamedToolCallbackProvider(
+                    "JavaSDKMCPClient_webSearch",
+                    "JavaSDKMCPClient_sendEmail"), List.of()) {
                 @Override
                 public void close() {
                     closedCount++;
                 }
             };
+        }
+    }
+
+    private static class NamedToolCallbackProvider extends SyncMcpToolCallbackProvider {
+        private final ToolCallback[] callbacks;
+
+        NamedToolCallbackProvider(String... names) {
+            this.callbacks = Arrays.stream(names).map(this::callback).toArray(ToolCallback[]::new);
+        }
+
+        @Override
+        public ToolCallback[] getToolCallbacks() {
+            return callbacks;
+        }
+
+        private ToolCallback callback(String name) {
+            ToolDefinition definition = mock(ToolDefinition.class);
+            when(definition.name()).thenReturn(name);
+            ToolCallback callback = mock(ToolCallback.class);
+            when(callback.getToolDefinition()).thenReturn(definition);
+            return callback;
         }
     }
 

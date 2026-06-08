@@ -1,6 +1,7 @@
 package com.idealagent.infrastructure.repository;
 
 import com.idealagent.domain.ai.model.entity.AiConfigRecord;
+import com.idealagent.domain.ai.model.entity.McpServerConfig;
 import com.idealagent.domain.ai.repository.IAiConfigRepository;
 import com.idealagent.domain.ai.model.enumeration.ConfigKind;
 import com.idealagent.infrastructure.persistent.dao.IAiConfigDao;
@@ -19,7 +20,7 @@ public class AiConfigRepository implements IAiConfigRepository {
 
     @Override
     public AiConfigRecord save(ConfigKind kind, AiConfigRecord record) {
-        AiConfigData data = toData(record);
+        AiConfigData data = toData(kind, record);
         switch (kind) {
             case API -> aiConfigDao.insertApi(data);
             case MODEL -> aiConfigDao.insertModel(data);
@@ -53,7 +54,7 @@ public class AiConfigRepository implements IAiConfigRepository {
 
     @Override
     public AiConfigRecord update(ConfigKind kind, AiConfigRecord record) {
-        AiConfigData data = toData(record);
+        AiConfigData data = toData(kind, record);
         switch (kind) {
             case API -> aiConfigDao.updateApi(data);
             case MODEL -> aiConfigDao.updateModel(data);
@@ -92,7 +93,7 @@ public class AiConfigRepository implements IAiConfigRepository {
         }
     }
 
-    private AiConfigData toData(AiConfigRecord record) {
+    private AiConfigData toData(ConfigKind kind, AiConfigRecord record) {
         AiConfigData data = new AiConfigData();
         data.setConfigId(record.getConfigId());
         data.setName(record.getName());
@@ -104,6 +105,9 @@ public class AiConfigRepository implements IAiConfigRepository {
         data.setOwnerId(record.getOwnerId());
         data.setOwnerType(record.getOwnerType());
         data.setConfigType(record.getConfigType());
+        if (kind == ConfigKind.MCP) {
+            data.setTimeoutMinutes(Math.toIntExact(McpServerConfig.parse(record.getContent()).timeoutMinutes()));
+        }
         return data;
     }
 
@@ -112,7 +116,7 @@ public class AiConfigRepository implements IAiConfigRepository {
         record.setConfigId(data.getConfigId());
         record.setName(data.getName());
         record.setType(data.getType());
-        record.setContent(data.getContent());
+        record.setContent(withMcpTimeout(data.getContent(), data.getTimeoutMinutes()));
         record.setSecret(data.getSecret());
         record.setRefId(data.getRefId());
         record.setStatus(data.getStatus());
@@ -122,5 +126,21 @@ public class AiConfigRepository implements IAiConfigRepository {
         record.setCreateTime(data.getCreateTime());
         record.setUpdateTime(data.getUpdateTime());
         return record;
+    }
+
+    private String withMcpTimeout(String content, Integer timeoutMinutes) {
+        if (timeoutMinutes == null) {
+            return content;
+        }
+        McpServerConfig.parse(content);
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.Map<String, Object> map = mapper.readValue(content == null || content.isBlank() ? "{}" : content, new com.fasterxml.jackson.core.type.TypeReference<>() {
+            });
+            map.put("timeoutMinutes", timeoutMinutes);
+            return mapper.writeValueAsString(map);
+        } catch (Exception ignored) {
+            return content == null || content.isBlank() ? "{\"timeoutMinutes\":" + timeoutMinutes + "}" : content;
+        }
     }
 }

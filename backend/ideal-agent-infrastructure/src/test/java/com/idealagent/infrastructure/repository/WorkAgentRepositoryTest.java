@@ -36,19 +36,20 @@ class WorkAgentRepositoryTest {
     }
 
     @Test
-    void listsFlowMapByRoleWithPromptContent() {
+    void listsFlowMapByRoleWithUserPrompt() {
         AiFlow flow = new AiFlow();
         flow.setAgentId("agent_default_step");
         flow.setClientId("client_default_chat");
-        flow.setRoleType("planner");
-        flow.setSortOrder(2);
-        flow.setPromptContent("plan %s %s");
+        flow.setClientRole("planner");
+        flow.setFlowSeq(2);
+        flow.setUserPrompt("plan %s %s");
         when(flowDao.listEnabledByAgentId("agent_default_step")).thenReturn(List.of(flow));
 
         Map<String, AiFlowVO> flowMap = repository.listFlowMap("agent_default_step");
 
         assertThat(flowMap).containsOnlyKeys("planner");
         assertThat(flowMap.get("planner").getUserPrompt()).isEqualTo("plan %s %s");
+        assertThat(flowMap.get("planner").getFlowSeq()).isEqualTo(2);
     }
 
     @Test

@@ -54,19 +54,20 @@ class RuntimeMessageBuilderTest {
     }
 
     @Test
-    void appliesRagAdvisorParametersOnlyWhenRagTagIsProvided() {
+    void appliesRagAdvisorParametersAndDefaultKnowledgeFilter() {
         configRepository.add(ConfigKind.CONFIG, binding("config_rag", "client_work", "advisor", "advisor_rag", 1));
-        configRepository.add(ConfigKind.ADVISOR, advisor("advisor_rag", "Rag", "{\"ragTag\":\"ignored\",\"topK\":4,\"filterExpression\":\"source == 'note.md'\"}", 1));
+        configRepository.add(ConfigKind.ADVISOR, advisor("advisor_rag", "Rag", "{\"topK\":4,\"filterExpression\":\"knowledge == 'advisor-docs'\"}", 1));
 
         List<Message> withoutRag = builder.build(7L, "session_work", "client_work", "node prompt", null, "work");
-        assertThat(augmentService.lastRagTag).isNull();
-        assertThat(augmentService.lastTopK).isNull();
-        assertThat(withoutRag).extracting(Message::getText).containsExactly("node prompt");
+        assertThat(augmentService.lastRagTag).isEqualTo("advisor-docs");
+        assertThat(augmentService.lastTopK).isEqualTo(4);
+        assertThat(augmentService.lastFilterExpression).isEqualTo("knowledge == 'advisor-docs'");
+        assertThat(withoutRag).extracting(Message::getText).containsExactly("RAG:advisor-docs", "node prompt");
 
         List<Message> withRag = builder.build(7L, "session_work", "client_work", "node prompt", "project-docs", "work");
         assertThat(augmentService.lastRagTag).isEqualTo("project-docs");
         assertThat(augmentService.lastTopK).isEqualTo(4);
-        assertThat(augmentService.lastFilterExpression).isEqualTo("source == 'note.md'");
+        assertThat(augmentService.lastFilterExpression).isEqualTo("knowledge == 'advisor-docs'");
         assertThat(withRag).extracting(Message::getText).containsExactly("RAG:project-docs", "node prompt");
         assertThat(withRag.get(0)).isInstanceOf(SystemMessage.class);
     }

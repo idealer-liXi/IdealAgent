@@ -17,9 +17,11 @@ const kinds = [
   { key: 'config', label: 'Binding', description: '配置绑定关系', icon: '🔗' }
 ]
 
+const workClientRoles = ['inspector', 'planner', 'runner', 'replier', 'analyzer', 'performer', 'supervisor', 'summarizer', 'observer', 'reasoner', 'actor', 'evaluator']
+
 const templates = {
   api: { configId: 'api_deepseek', name: 'DeepSeek API', type: 'openai', content: 'https://api.deepseek.com', secret: '', status: 1, ownerId: 0 },
-  model: { configId: 'model_deepseek_v4_flash', name: 'deepseek-v4-flash', type: 'chat', refId: '', status: 1, ownerId: 0 },
+  model: { configId: 'model_deepseek_v4_flash', name: 'deepseek-v4-flash', type: 'model', refId: '', status: 1, ownerId: 0 },
   client: { configId: 'client_deepseek_v4_flash', name: 'DeepSeek V4 Flash', type: 'chat', content: 'assistant', refId: '', secret: '', status: 1, ownerId: 0 },
   prompt: { configId: 'prompt_system_local', name: 'System Prompt', type: 'system', content: 'You are IdealAgent.', status: 1, ownerId: 0 },
   advisor: { configId: 'advisor_memory_local', name: 'Memory Advisor', type: 'Memory', content: '{"maxMessages":20}', status: 1, ownerId: 0 },
@@ -40,11 +42,23 @@ const message = ref('')
 const loading = ref(false)
 const mcpSseForm = ref({ ...mcpSseDefaults })
 const mcpStdioForm = ref({ ...mcpStdioDefaults })
+const ragTags = ref([])
+const ragAdvisorForm = ref({ ragTag: '', topK: 4 })
 
 const selectedKindMeta = computed(() => kinds.find(item => item.key === selectedKind.value) || kinds[0])
 const ownerOptions = computed(() => optionsFor(form.value.ownerType))
-const bindingTargetOptions = computed(() => optionsFor(form.value.configType))
+const selectedBindingOwner = computed(() => ownerOptions.value.find(item => item.configId === form.value.content) || null)
+const selectedBindingOwnerIsChatClient = computed(() => selectedKind.value === 'config' && form.value.ownerType === 'client' && selectedBindingOwner.value?.type === 'chat')
+const bindingConfigTypeOptions = computed(() => selectedBindingOwnerIsChatClient.value ? ['prompt', 'advisor'] : ['prompt', 'advisor', 'mcp'])
+const bindingTargetOptions = computed(() => {
+  const options = optionsFor(form.value.configType)
+  if (!selectedBindingOwnerIsChatClient.value) return options
+  if (form.value.configType === 'mcp') return []
+  if (form.value.configType === 'advisor') return options.filter(item => String(item.type || '').toLowerCase() !== 'rag')
+  return options
+})
 const isEditing = computed(() => Boolean(editingConfigId.value))
+const clientRoleOptions = computed(() => form.value.type === 'work' ? workClientRoles : ['assistant'])
 
 const selectClass = 'w-full rounded-card-md border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-all duration-150 ease-out focus:border-accent focus:bg-elevated focus:ring-2 focus:ring-accent-light'
 
@@ -55,10 +69,25 @@ watch(selectedKind, async kind => {
   await loadRecords()
 })
 
+watch(ragAdvisorForm, () => {
+  if (selectedKind.value === 'advisor' && form.value.type === 'Rag') {
+    applyRagAdvisorContent()
+  }
+}, { deep: true })
+
 onMounted(refreshAll)
 
 async function refreshAll() {
-  await Promise.all([loadAllRecords(), loadRecords()])
+  await Promise.all([loadAllRecords(), loadRecords(), loadRagTags()])
+}
+
+async function loadRagTags() {
+  try {
+    const response = await request.get('/ai/rag/tags')
+    ragTags.value = response.data.data || []
+  } catch (e) {
+    ragTags.value = []
+  }
 }
 
 async function loadAllRecords() {
@@ -142,6 +171,9 @@ function editRecord(record) {
   if (selectedKind.value === 'mcp') {
     syncMcpStructuredForm(form.value)
   }
+  if (selectedKind.value === 'advisor' && form.value.type === 'Rag') {
+    syncRagAdvisorForm(form.value.content)
+  }
   message.value = `正在编辑 ${record.configId}`
   error.value = ''
 }
@@ -151,6 +183,9 @@ function resetForm(kind = selectedKind.value) {
   form.value = cloneTemplate(kind)
   if (kind === 'mcp') {
     syncMcpStructuredForm(form.value)
+  }
+  if (kind === 'advisor') {
+    syncRagAdvisorForm(form.value.content)
   }
 }
 
@@ -200,8 +235,19 @@ function onClientModelChange() {
   form.value.secret = model?.name || ''
 }
 
+function onClientTypeChange() {
+  form.value.content = form.value.type === 'work' ? 'runner' : 'assistant'
+}
+
 function onOwnerTypeChange() {
   form.value.content = ''
+}
+
+function onBindingOwnerChange() {
+  if (selectedBindingOwnerIsChatClient.value && form.value.configType === 'mcp') {
+    form.value.configType = 'prompt'
+  }
+  form.value.refId = ''
 }
 
 function onConfigTypeChange() {
@@ -224,8 +270,31 @@ function onAdvisorTypeChange() {
     return
   }
   if (form.value.type === 'Rag') {
-    form.value.content = '{"topK":4,"filterExpression":"source == \\\"note.md\\\""}'
+    syncRagAdvisorForm(form.value.content)
+    applyRagAdvisorContent()
   }
+}
+
+function syncRagAdvisorForm(content) {
+  const parsed = parseJsonObject(content)
+  ragAdvisorForm.value = {
+    ragTag: knowledgeTag(parsed.filterExpression || ''),
+    topK: positiveNumberOrDefault(parsed.topK, 4)
+  }
+}
+
+function applyRagAdvisorContent() {
+  const ragTag = trimmed(ragAdvisorForm.value.ragTag)
+  const topK = positiveNumberOrDefault(ragAdvisorForm.value.topK, 4)
+  form.value.content = JSON.stringify({
+    topK,
+    filterExpression: ragTag ? `knowledge == '${ragTag}'` : ''
+  })
+}
+
+function knowledgeTag(filterExpression) {
+  const match = String(filterExpression || '').match(/knowledge\s*==\s*['"]([^'"]+)['"]/i)
+  return match ? match[1] : ''
 }
 
 function syncMcpStructuredForm(record) {
@@ -319,10 +388,10 @@ function toPayload(kind, data) {
     return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: trimmed(data.content), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'model') {
-    return { ...base, name: trimmed(data.name), type: 'chat', refId: trimmed(data.refId), ownerId: ownerIdOf(data.ownerId) }
+    return { ...base, name: trimmed(data.name), type: 'model', refId: trimmed(data.refId), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'client') {
-    return { ...base, name: trimmed(data.name), type: 'chat', content: trimmed(data.content), refId: trimmed(data.refId), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
+    return { ...base, name: trimmed(data.name), type: trimmed(data.type) || 'chat', content: trimmed(data.content), refId: trimmed(data.refId), secret: trimmed(data.secret), ownerId: ownerIdOf(data.ownerId) }
   }
   if (kind === 'prompt') {
     return { ...base, name: trimmed(data.name), type: trimmed(data.type), content: data.content, ownerId: ownerIdOf(data.ownerId) }
@@ -423,9 +492,16 @@ function toPayload(kind, data) {
                     <template #label>名称</template>
                   </UiInput>
                   <label class="block">
+                    <span class="mb-2 block text-sm font-medium text-text-secondary">Client 类型</span>
+                    <select v-model="form.type" :class="selectClass" @change="onClientTypeChange">
+                      <option value="chat">Chat Client</option>
+                      <option value="work">Work Client</option>
+                    </select>
+                  </label>
+                  <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">角色</span>
-                    <select v-model="form.content" :class="selectClass">
-                      <option value="assistant">Assistant</option>
+                    <select v-model="form.content" :class="selectClass" @change="onBindingOwnerChange">
+                      <option v-for="role in clientRoleOptions" :key="role" :value="role">{{ role }}</option>
                     </select>
                   </label>
                   <label class="block">
@@ -469,6 +545,20 @@ function toPayload(kind, data) {
                       <option value="Rag">Rag</option>
                     </select>
                   </label>
+                  <div v-if="form.type === 'Rag'" class="rounded-card border border-border-subtle bg-surface p-3">
+                    <div class="mb-3 text-sm font-semibold text-text-secondary">RAG 知识库过滤</div>
+                    <label class="block">
+                      <span class="mb-2 block text-xs font-medium text-text-tertiary">ragTag</span>
+                      <select v-model="ragAdvisorForm.ragTag" :class="selectClass" @change="applyRagAdvisorContent">
+                        <option value="">请选择知识库标签</option>
+                        <option v-for="tag in ragTags" :key="tag.ragTag" :value="tag.ragTag">{{ tag.ragTag }}</option>
+                      </select>
+                    </label>
+                    <UiInput v-model.number="ragAdvisorForm.topK" class="mt-3" type="number" placeholder="4" @input="applyRagAdvisorContent">
+                      <template #label>topK</template>
+                    </UiInput>
+                    <p class="mt-2 text-xs text-text-tertiary">保存为 MiniAgent 风格：{"topK":4,"filterExpression":"knowledge == 'ragTag'"}</p>
+                  </div>
                   <UiInput v-model="form.content" type="textarea" :rows="5" placeholder='{"maxMessages":20} 或 {"topK":4,"filterExpression":"source == &quot;note.md&quot;"}'>
                     <template #label>配置内容</template>
                   </UiInput>
@@ -543,9 +633,7 @@ function toPayload(kind, data) {
                   <label class="block">
                     <span class="mb-2 block text-sm font-medium text-text-secondary">绑定类型</span>
                     <select v-model="form.configType" :class="selectClass" @change="onConfigTypeChange">
-                      <option value="prompt">Prompt</option>
-                      <option value="advisor">Advisor</option>
-                      <option value="mcp">MCP</option>
+                      <option v-for="type in bindingConfigTypeOptions" :key="type" :value="type">{{ type === 'mcp' ? 'MCP' : type === 'advisor' ? 'Advisor' : 'Prompt' }}</option>
                     </select>
                   </label>
                   <label class="block">
@@ -557,6 +645,9 @@ function toPayload(kind, data) {
                       </option>
                     </select>
                   </label>
+                  <p v-if="selectedBindingOwnerIsChatClient" class="rounded-card bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Chat Client 的 RAG/MCP 由 Chat 页面按请求选择；Binding 仅允许 Prompt 和非 Rag Advisor。
+                  </p>
                 </template>
 
                 <label class="block">

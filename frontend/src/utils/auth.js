@@ -27,3 +27,8 @@ export function getStoredProfile() {
     return null
   }
 }
+
+export function isAdmin() {
+  const profile = getStoredProfile()
+  return String(profile?.userRole || '').toLowerCase() === 'admin'
+}
