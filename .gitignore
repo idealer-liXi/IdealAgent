@@ -22,6 +22,20 @@ replay_pid*
 .env
 .env.*
 !.env.example
+*.local
+*.local.*
+*.secret
+*.secrets
+
+# Private keys, certificates, and local credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
 
 # Java / Maven build output
 target/
@@ -39,5 +53,6 @@ pnpm-debug.log*
 
 # Docker/local runtime data
 backend/ideal-agent-app/src/main/resources/application-local.yml
+backend/ideal-agent-app/src/main/resources/application-*.local.yml
 backend/docs/docker/.env
 backend/docs/docker/data/

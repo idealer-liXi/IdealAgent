@@ -1,0 +1,62 @@
+server:
+  port: 8066
+  servlet:
+    context-path: /idealagent/api/v1
+
+spring:
+  main:
+    banner-mode: off
+    log-startup-info: false
+  ai:
+    model:
+      chat: none
+      embedding: none
+      audio:
+        speech: none
+        transcription: none
+      image: none
+      moderation: none
+
+datasource:
+  hikari:
+    minimum-idle: 5
+    maximum-pool-size: 20
+    idle-timeout: 180000
+    max-lifetime: 1800000
+    connection-timeout: 30000
+    connection-test-query: SELECT 1
+    initialization-fail-timeout: 1
+  mysql:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${IDEAL_AGENT_USERNAME:idealagent}
+    password: ${IDEAL_AGENT_PASSWORD:123456}
+    jdbc-url: jdbc:mysql://agent-mysql:3306/${IDEAL_AGENT_MYSQL_DATABASE:ideal_agent}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    pool-name: MYSQL_HIKARI
+  postgresql:
+    username: ${IDEAL_AGENT_USERNAME:idealagent}
+    password: ${IDEAL_AGENT_PASSWORD:123456}
+    driver-class-name: org.postgresql.Driver
+    jdbc-url: jdbc:postgresql://agent-pgvector:5432/ideal_agent
+    pool-name: POSTGRESQL_HIKARI
+
+mybatis:
+  mapper-locations: classpath:/mapper/*.xml
+
+ideal-agent:
+  embedding:
+    base-url: ${QWEN_BASE_URL:}
+    api-key: ${QWEN_API_KEY:}
+    model: ${EMBEDDING_MODEL:text-embedding-v4}
+    dimensions: ${EMBEDDING_DIMENSIONS:1024}
+    encoding-format: float
+    embeddings-path: /v1/embeddings
+    schema-name: public
+    table-name: vector_store_openai
+  mcp:
+    header:
+      secret: X-IdealAgent-Mcp-Secret
+      user-id: X-IdealAgent-Mcp-UserId
+  jwt:
+    issuer: ${IDEAL_AGENT_JWT_ISSUER:ideal-agent}
+    secret: ${IDEAL_AGENT_JWT_SECRET:ideal-agent-dev-secret-change-me}
+    expire-hours: ${IDEAL_AGENT_JWT_EXPIRE_HOURS:168}

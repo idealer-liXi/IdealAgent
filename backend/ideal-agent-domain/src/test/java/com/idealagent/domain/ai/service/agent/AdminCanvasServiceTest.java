@@ -203,17 +203,31 @@ class AdminCanvasServiceTest {
     }
 
     @Test
-    void rejectsCanvasBatchWhenStrategyFlowIsIncomplete() {
+    void savesCanvasBatchWhenStrategyFlowIsIncomplete() {
         when(repository.findAgent("agent_step")).thenReturn(new AgentManageVO("agent_step", "Step", "step", "desc", "model_x", "", 1));
         when(repository.listFlows("agent_step")).thenReturn(List.of(
                 new FlowManageVO("agent_step", "client_inspector", "inspector", "Inspect", 1)));
 
-        assertThatThrownBy(() -> service.saveCanvas("agent_step", new CanvasSaveDTO(
+        service.saveCanvas("agent_step", new CanvasSaveDTO(
                 List.of(),
                 List.of(new CanvasRelationDTO("client", "prompt", "client_inspector", "prompt_x", "agent_step", "prompt", null, null, null)),
-                List.of())))
-                .isInstanceOf(AgentManagementException.class)
-                .hasMessageContaining("Agent Flow 未完整配置");
+                List.of()));
+
+        verify(aiConfigService).create(eq(ConfigKind.CONFIG), any(AiConfigRecordDTO.class));
+    }
+
+    @Test
+    void savesCanvasBatchWhenDeletingFlowLeavesStrategyIncomplete() {
+        when(repository.findAgent("agent_step")).thenReturn(new AgentManageVO("agent_step", "Step", "step", "desc", "model_x", "", 1));
+        when(repository.listFlows("agent_step")).thenReturn(List.of(
+                new FlowManageVO("agent_step", "client_inspector", "inspector", "Inspect", 1)));
+
+        service.saveCanvas("agent_step", new CanvasSaveDTO(
+                List.of(),
+                List.of(),
+                List.of(new CanvasRelationDTO("agent", "client", "agent_step", "client_planner", "agent_step", null, null, null, null))));
+
+        verify(agentManagementService).deleteFlow("agent_step", "client_planner");
     }
 
     private AiConfigRecord config(String id, String type) {

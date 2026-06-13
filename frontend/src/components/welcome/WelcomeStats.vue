@@ -6,8 +6,8 @@ const props = defineProps({
 })
 
 const stats = [
-  { label: '项目阶段', value: 'Stage 4', icon: '🚀', color: 'bg-accent/10 text-accent' },
-  { label: '后端状态', value: '已连接', icon: '✅', color: 'bg-emerald-50 text-emerald-600' },
+  { label: '核心能力', value: '已接入', icon: '🚀', color: 'bg-accent/10 text-accent' },
+  { label: '部署模式', value: 'Docker', icon: '✅', color: 'bg-emerald-50 text-emerald-600' },
   { label: '用户角色', value: props.profile?.userRole || 'user', icon: '👤', color: 'bg-amber-50 text-amber-600' },
   { label: '当前用户', value: props.profile?.userName || 'IdealAgent', icon: '🏷️', color: 'bg-sky-50 text-sky-600' },
 ]

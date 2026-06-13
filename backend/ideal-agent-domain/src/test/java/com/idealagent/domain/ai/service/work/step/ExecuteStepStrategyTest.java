@@ -168,6 +168,37 @@ class ExecuteStepStrategyTest {
     }
 
     @Test
+    void runnerMatchesShortToolNamesFromPlannerSteps() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[" +
+                "{\"step_target\":\"查询新闻\",\"step_mcp\":\"{\\\"tool\\\":\\\"webSearch\\\",\\\"query\\\":\\\"最新娱乐新闻\\\"}\"}," +
+                "{\"step_target\":\"发送邮件\",\"step_mcp\":\"{\\\"tool\\\":\\\"sendEmail\\\",\\\"to\\\":\\\"2755027635@qq.com\\\"}\"}" +
+                "]");
+        gateway.responses.add("{\"runner_result\":\"新闻数据\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"runner_result\":\"邮件已发送\",\"runner_status\":\"SUCCESS\"}");
+        gateway.responses.add("{\"replier_overview\":\"完成\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(toolNames(gateway.toolCallbackProviders.get(2))).containsExactly("JavaSDKMCPClient_webSearch");
+        assertThat(toolNames(gateway.toolCallbackProviders.get(3))).containsExactly("JavaSDKMCPClient_sendEmail");
+    }
+
+    @Test
+    void runnerFailsWhenRequiredMcpStepMatchesNoTool() {
+        gateway.responses.add("[]");
+        gateway.responses.add("[{\"step_target\":\"发送短信\",\"step_mcp\":\"{\\\"tool\\\":\\\"sendSms\\\",\\\"to\\\":\\\"10086\\\"}\"}]");
+        gateway.responses.add("{\"replier_overview\":\"执行失败\"}");
+
+        strategy.execute(request(), sink);
+
+        assertThat(gateway.prompts).hasSize(3);
+        assertThat(gateway.toolCallbackProviders).hasSize(3);
+        assertThat(sink.messages).extracting(ExecuteResponseEntity::getSectionType).contains("runner_exception");
+        assertThat(sink.messages).extracting(ExecuteResponseEntity::getSectionContent).contains("MCP 工具未匹配: sendSms");
+    }
+
+    @Test
     void runnerPassesPreviousStepResultsToLaterSteps() {
         gateway.responses.add("[]");
         gateway.responses.add("[" +

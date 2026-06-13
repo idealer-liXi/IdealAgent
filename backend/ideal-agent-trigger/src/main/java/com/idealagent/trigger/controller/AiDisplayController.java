@@ -27,9 +27,23 @@ public class AiDisplayController {
                 .toList());
     }
 
+    @GetMapping("/models")
+    public Result<List<ConfigDisplayVO>> models() {
+        return Result.success(aiConfigService.list(ConfigKind.MODEL).stream()
+                .filter(record -> Integer.valueOf(1).equals(record.status()))
+                .map(ConfigDisplayVO::from)
+                .toList());
+    }
+
     public record McpDisplayVO(String configId, String name, String type, Integer status) {
         private static McpDisplayVO from(AiConfigRecordVO record) {
             return new McpDisplayVO(record.configId(), record.name(), record.type(), record.status());
+        }
+    }
+
+    public record ConfigDisplayVO(String configId, String name, String type, Integer status) {
+        private static ConfigDisplayVO from(AiConfigRecordVO record) {
+            return new ConfigDisplayVO(record.configId(), record.name(), record.type(), record.status());
         }
     }
 }

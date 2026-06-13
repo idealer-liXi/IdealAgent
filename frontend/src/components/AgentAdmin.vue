@@ -5,6 +5,7 @@ import request from '../request/request'
 import Sidebar from './Sidebar.vue'
 import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
+import { agentSaveFailureMessage, agentSaveSuccessMessage, requireSuccessResult } from './agent/agentFeedback'
 
 const router = useRouter()
 const agents = ref([])
@@ -86,11 +87,12 @@ async function saveAgent() {
     const response = editingAgentId.value
       ? await request.put(`/ai/admin/agents/${editingAgentId.value}`, body)
       : await request.post('/ai/admin/agents', body)
-    message.value = `${editingAgentId.value ? '已更新' : '已创建'} ${response.data.data.agentId}`
+    const savedAgent = requireSuccessResult(response.data, editingAgentId.value ? 'Agent 更新失败' : 'Agent 创建失败')
+    message.value = agentSaveSuccessMessage(savedAgent, Boolean(editingAgentId.value))
     await loadAgents()
-    editAgent(response.data.data)
+    editAgent(savedAgent)
   } catch (e) {
-    error.value = e.response?.data?.message || 'Agent 保存失败'
+    error.value = agentSaveFailureMessage(e, Boolean(editingAgentId.value))
   } finally {
     loading.value = false
   }
@@ -145,8 +147,8 @@ function modelLabel(model) {
             </div>
           </div>
 
-          <p v-if="error" class="mb-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error }}</p>
-          <p v-if="message" class="mb-4 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{{ message }}</p>
+          <p v-if="error" class="mb-4 rounded-card border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{{ error }}</p>
+          <p v-if="message" class="mb-4 rounded-card border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{{ message }}</p>
 
           <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
             <div class="overflow-hidden rounded-card-lg border border-border-default bg-elevated shadow-card">
@@ -212,6 +214,8 @@ function modelLabel(model) {
                   <option :value="0">禁用</option>
                 </select>
                 <UiButton full-width :loading="loading" @click="saveAgent">保存 Agent</UiButton>
+                <p v-if="message" class="rounded-card border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{{ message }}</p>
+                <p v-if="error" class="rounded-card border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{{ error }}</p>
               </div>
             </aside>
           </div>

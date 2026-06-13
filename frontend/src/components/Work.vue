@@ -9,6 +9,7 @@ import SessionList from './chat/SessionList.vue'
 import {
   activeParameterForAgent,
   buildProcessCards,
+  canEditWorkInput,
   canSendWork,
   isParameterEditable,
   userInputCard
@@ -40,6 +41,7 @@ const parameterInputBaseClass = 'w-full rounded-card border border-border-defaul
 
 const selectedAgent = computed(() => agents.value.find(item => item.agentId === agentId.value) || null)
 const canSend = computed(() => canSendWork({ agentId: agentId.value, content: content.value, loading: loading.value }))
+const canEditInput = computed(() => canEditWorkInput({ loading: loading.value }))
 const activeParameter = computed(() => activeParameterForAgent(selectedAgent.value?.agentType))
 const flowRoles = computed(() => strategyRoles[(selectedAgent.value?.agentType || '').toLowerCase()] || [])
 const completedRoles = computed(() => new Set(cards.value.map(card => card?.clientType).filter(Boolean)))
@@ -340,7 +342,7 @@ function progressLineClass(index) {
                   </button>
                 </div>
                 <p class="text-sm text-text-secondary leading-relaxed">
-                  选择 Work Agent 后执行任务，实时查看 MiniAgent 风格的多角色执行过程。
+                  选择 Work Agent 后执行任务，实时查看策略角色的多步骤执行过程。
                 </p>
 
                 <label class="mt-5 block">
@@ -476,8 +478,8 @@ function progressLineClass(index) {
               <textarea
                 v-model="content"
                 class="min-h-[96px] w-full resize-none rounded-card border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/10"
-                :placeholder="loading ? 'Work 执行中，请等待完成后再发送' : '输入要交给 Work Agent 执行的任务'"
-                :disabled="loading"
+                :placeholder="loading ? 'Work 执行中，可继续输入下一条，完成后再发送' : '输入要交给 Work Agent 执行的任务'"
+                :disabled="!canEditInput"
                 @keydown.ctrl.enter.prevent="send"
                 @keydown.meta.enter.prevent="send"
               />

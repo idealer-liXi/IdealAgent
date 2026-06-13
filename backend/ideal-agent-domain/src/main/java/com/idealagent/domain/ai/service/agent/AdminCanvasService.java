@@ -66,7 +66,6 @@ public class AdminCanvasService {
         for (CanvasRelationDTO relation : safeList(normalized.relations())) {
             saveRelation(relationWithAgent(agentId, relation));
         }
-        assertCompleteStrategyFlow(agentId.trim());
     }
 
     public void saveNode(CanvasNodeDTO request) {
@@ -174,34 +173,6 @@ public class AdminCanvasService {
         if (request.flowSeq() > roles.size() || !roles.get(request.flowSeq() - 1).equals(role)) {
             throw new AgentManagementException("Flow 顺序不匹配 Agent 策略");
         }
-    }
-
-    private void assertCompleteStrategyFlow(String agentId) {
-        AgentManageVO agent = repository.findAgent(agentId);
-        if (agent == null) {
-            throw new AgentManagementException("Agent 不存在");
-        }
-        List<String> roles = ROLE_ORDER.get(normalize(agent.agentType()));
-        if (roles == null) {
-            throw new AgentManagementException("Agent 类型不支持");
-        }
-        Map<String, FlowManageVO> flows = repository.listFlows(agentId).stream()
-                .collect(java.util.stream.Collectors.toMap(FlowManageVO::clientRole, flow -> flow, (first, second) -> first));
-        List<String> missing = roles.stream()
-                .filter(role -> !hasExpectedFlow(flows.get(role), role, roles.indexOf(role) + 1))
-                .toList();
-        if (!missing.isEmpty()) {
-            throw new AgentManagementException("Agent Flow 未完整配置，缺少角色：" + String.join(", ", missing));
-        }
-    }
-
-    private boolean hasExpectedFlow(FlowManageVO flow, String role, int seq) {
-        return flow != null
-                && role.equals(normalize(flow.clientRole()))
-                && flow.flowSeq() != null
-                && flow.flowSeq() == seq
-                && StringUtils.hasText(flow.clientId())
-                && StringUtils.hasText(flow.userPrompt());
     }
 
     private CanvasRelationDTO relationWithAgent(String agentId, CanvasRelationDTO relation) {

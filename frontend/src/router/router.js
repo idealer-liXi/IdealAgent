@@ -4,6 +4,7 @@ import Auth from '../components/Auth.vue'
 import AiConfig from '../components/AiConfig.vue'
 import Chat from '../components/Chat.vue'
 import Work from '../components/Work.vue'
+import Workshop from '../components/Workshop.vue'
 import AgentAdmin from '../components/AgentAdmin.vue'
 import AgentFlow from '../components/AgentFlow.vue'
 import AgentCanvas from '../components/AgentCanvas.vue'
@@ -18,6 +19,7 @@ const routes = [
   { path: '/config', name: 'config', component: AiConfig, meta: { requiresAuth: true, adminOnly: true } },
   { path: '/chat', name: 'chat', component: Chat, meta: { requiresAuth: true } },
   { path: '/work', name: 'work', component: Work, meta: { requiresAuth: true } },
+  { path: '/workshop', name: 'workshop', component: Workshop, meta: { requiresAuth: true } },
   { path: '/agent-display', name: 'agent-display', component: AgentDisplay, meta: { requiresAuth: true } },
   { path: '/mcp-display', name: 'mcp-display', component: McpDisplay, meta: { requiresAuth: true } },
   { path: '/agents', name: 'agents', component: AgentAdmin, meta: { requiresAuth: true, adminOnly: true } },

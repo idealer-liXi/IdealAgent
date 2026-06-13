@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
   activeParameterForAgent,
   buildProcessCards,
+  canEditWorkInput,
   canSendWork,
   isParameterEditable,
   userInputCard
@@ -31,6 +32,11 @@ test('work cannot be sent while a run is loading', () => {
   assert.equal(canSendWork({ agentId: 'agent_step', content: '查新闻', loading: true }), false)
   assert.equal(canSendWork({ agentId: 'agent_step', content: '   ', loading: false }), false)
   assert.equal(canSendWork({ agentId: '', content: '查新闻', loading: false }), false)
+})
+
+test('work input remains editable while a run is loading', () => {
+  assert.equal(canEditWorkInput({ loading: false }), true)
+  assert.equal(canEditWorkInput({ loading: true }), true)
 })
 
 test('process cards keep user input before execution events', () => {

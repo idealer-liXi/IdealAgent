@@ -71,7 +71,7 @@ onMounted(async () => {
             <p class="text-xs font-semibold uppercase tracking-widest text-accent">Welcome</p>
             <h1 class="mt-3 text-3xl font-bold tracking-tight md:text-4xl">IdealAgent 仪表盘</h1>
             <p class="mt-3 max-w-2xl text-sm leading-relaxed text-text-secondary">
-              当前已完成项目骨架、认证、配置管理和基础 Chat。后续阶段会继续补齐 RAG、MCP、Work Agent、Workspace 和 Admin。
+              当前已接入 Chat、RAG、MCP、Work Agent、Agent 管理、Config 管理、Workshop 与 Docker 部署，支持从配置到执行的完整智能体工作流。
             </p>
             <p v-if="profile" class="mt-2 text-sm text-text-tertiary">
               当前登录：{{ profile.userName }} · {{ profile.userRole }}

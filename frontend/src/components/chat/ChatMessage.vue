@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import hljs from 'highlight.js'
+import { escapeHtml, renderCodeBlock } from './chatMarkdown'
 import 'highlight.js/styles/github.css'
 
 const props = defineProps({
@@ -15,20 +15,9 @@ const isUser = computed(() => props.role === 'user')
 
 marked.use({
   renderer: {
-    code({ text, lang }) {
-      const language = hljs.getLanguage(lang) ? lang : 'plaintext'
-      const highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value
-      return `<pre class="hljs"><code class="hljs language-${language}">${highlighted}</code></pre>`
-    }
+    code: renderCodeBlock
   }
 })
-
-function escapeHtml(text) {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
 
 const renderedHtml = computed(() => {
   if (!props.content) return ''

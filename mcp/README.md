@@ -1,6 +1,6 @@
 # IdealAgent MCP Servers
 
-This directory recreates MiniAgent's MCP learning services.
+This directory contains IdealAgent MCP SSE services used by Chat and Work Agent workflows.
 
 Planned services:
 

@@ -141,7 +141,7 @@ function closePrompt() {
             <div>
               <p class="text-xs font-semibold uppercase tracking-widest text-accent">FLOW</p>
               <h1 class="mt-2 text-2xl font-bold">FLOW 管理</h1>
-              <p class="mt-2 text-sm text-text-secondary">按 Agent 查看 MiniAgent 风格角色槽位。</p>
+              <p class="mt-2 text-sm text-text-secondary">按 Agent 查看策略角色槽位。</p>
             </div>
             <div class="flex gap-2">
               <UiButton variant="secondary" @click="router.push('/agents')">返回 AGENT</UiButton>

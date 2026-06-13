@@ -6,6 +6,9 @@ import Footer from './Footer.vue'
 import UiButton from './ui/UiButton.vue'
 import UiInput from './ui/UiInput.vue'
 import ConfigSection from './config/ConfigSection.vue'
+import { groupBindingRecordsByClient } from './config/configRecordGroups'
+import { bindingDependenciesForTarget, deleteTargetConfirmMessage } from './config/configDeletionPlan'
+import { isBindingGroupCollapsed, toggleBindingGroup } from './config/configBindingCollapse'
 
 const kinds = [
   { key: 'api', label: 'API', description: 'LLM 服务接入配置', icon: '🔌' },
@@ -44,6 +47,7 @@ const mcpSseForm = ref({ ...mcpSseDefaults })
 const mcpStdioForm = ref({ ...mcpStdioDefaults })
 const ragTags = ref([])
 const ragAdvisorForm = ref({ ragTag: '', topK: 4 })
+const collapsedBindingGroups = ref(new Set())
 
 const selectedKindMeta = computed(() => kinds.find(item => item.key === selectedKind.value) || kinds[0])
 const ownerOptions = computed(() => optionsFor(form.value.ownerType))
@@ -59,6 +63,7 @@ const bindingTargetOptions = computed(() => {
 })
 const isEditing = computed(() => Boolean(editingConfigId.value))
 const clientRoleOptions = computed(() => form.value.type === 'work' ? workClientRoles : ['assistant'])
+const bindingGroups = computed(() => groupBindingRecordsByClient(records.value, optionsFor('client')))
 
 const selectClass = 'w-full rounded-card-md border border-border-default bg-surface px-4 py-3 text-sm text-text-primary outline-none transition-all duration-150 ease-out focus:border-accent focus:bg-elevated focus:ring-2 focus:ring-accent-light'
 
@@ -107,9 +112,18 @@ async function loadRecords() {
   try {
     const response = await request.get(`/ai/config/${selectedKind.value}`)
     records.value = response.data.data || []
+    collapsedBindingGroups.value = new Set()
   } catch (e) {
     error.value = e.response?.data?.message || '配置列表加载失败'
   }
+}
+
+function bindingGroupCollapsed(clientId) {
+  return isBindingGroupCollapsed(collapsedBindingGroups.value, clientId)
+}
+
+function onToggleBindingGroup(clientId) {
+  collapsedBindingGroups.value = toggleBindingGroup(collapsedBindingGroups.value, clientId)
 }
 
 async function saveRecord() {
@@ -148,14 +162,20 @@ async function toggleStatus(record) {
 }
 
 async function deleteRecord(record) {
-  if (!window.confirm(`确认删除 ${record.configId}？`)) {
+  const dependencies = bindingDependenciesForTarget(selectedKind.value, record, allRecords.value.config || [])
+  if (!window.confirm(deleteTargetConfirmMessage(selectedKind.value, record, dependencies))) {
     return
   }
   error.value = ''
   message.value = ''
   try {
+    for (const dependency of dependencies) {
+      await request.delete(`/ai/config/config/${dependency.configId}`)
+    }
     await request.delete(`/ai/config/${selectedKind.value}/${record.configId}`)
-    message.value = `${record.configId} 已删除`
+    message.value = dependencies.length
+      ? `${record.configId} 已删除，并清理 ${dependencies.length} 条 Binding`
+      : `${record.configId} 已删除`
     if (editingConfigId.value === record.configId) {
       resetForm(selectedKind.value)
     }
@@ -446,6 +466,8 @@ function toPayload(kind, data) {
 
           <div class="grid gap-5 lg:grid-cols-[420px_1fr]">
             <ConfigSection
+              class="h-[calc(100vh-230px)] min-h-[560px] overflow-hidden"
+              body-class="config-card-scroll overflow-y-auto pr-1"
               :title="selectedKindMeta.label + ' 配置'"
               description="填写表单并保存"
             >
@@ -557,7 +579,7 @@ function toPayload(kind, data) {
                     <UiInput v-model.number="ragAdvisorForm.topK" class="mt-3" type="number" placeholder="4" @input="applyRagAdvisorContent">
                       <template #label>topK</template>
                     </UiInput>
-                    <p class="mt-2 text-xs text-text-tertiary">保存为 MiniAgent 风格：{"topK":4,"filterExpression":"knowledge == 'ragTag'"}</p>
+                    <p class="mt-2 text-xs text-text-tertiary">保存为 RAG Advisor 配置：{"topK":4,"filterExpression":"knowledge == 'ragTag'"}</p>
                   </div>
                   <UiInput v-model="form.content" type="textarea" :rows="5" placeholder='{"maxMessages":20} 或 {"topK":4,"filterExpression":"source == &quot;note.md&quot;"}'>
                     <template #label>配置内容</template>
@@ -676,12 +698,73 @@ function toPayload(kind, data) {
               </div>
             </ConfigSection>
 
-            <ConfigSection title="当前记录" description="已保存的配置列表">
+            <ConfigSection
+              class="h-[calc(100vh-230px)] min-h-[560px] overflow-hidden"
+              body-class="config-card-scroll overflow-y-auto pr-1"
+              title="当前记录"
+              description="已保存的配置列表"
+            >
               <template #action>
                 <UiButton variant="secondary" size="sm" @click="refreshAll">刷新</UiButton>
               </template>
 
-              <div class="mt-4 overflow-hidden rounded-card-md border border-border-subtle">
+              <div v-if="selectedKind === 'config'" class="mt-4 space-y-3">
+                <div v-for="group in bindingGroups" :key="group.clientId" class="overflow-hidden rounded-card-md border border-border-subtle bg-elevated">
+                  <button class="flex w-full flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface px-4 py-3 text-left transition-colors hover:bg-elevated" type="button" @click="onToggleBindingGroup(group.clientId)">
+                    <div class="min-w-0">
+                      <div class="font-semibold text-text-primary">{{ group.clientName }}</div>
+                      <div class="mt-1 font-mono text-xs text-text-tertiary">{{ group.clientId }}</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="rounded-full bg-accent/10 px-2.5 py-1 text-xs font-bold text-accent">{{ group.records.length }} bindings</span>
+                      <span class="text-sm font-bold text-text-tertiary">{{ bindingGroupCollapsed(group.clientId) ? '展开' : '收起' }}</span>
+                      <span class="text-xs text-text-tertiary">{{ bindingGroupCollapsed(group.clientId) ? '▼' : '▲' }}</span>
+                    </div>
+                  </button>
+                  <table v-if="!bindingGroupCollapsed(group.clientId)" class="w-full min-w-[640px] text-left text-sm">
+                    <thead class="bg-surface text-text-secondary">
+                      <tr>
+                        <th class="px-4 py-3 font-medium">ID</th>
+                        <th class="px-4 py-3 font-medium">绑定类型</th>
+                        <th class="px-4 py-3 font-medium">引用</th>
+                        <th class="px-4 py-3 font-medium">状态</th>
+                        <th class="px-4 py-3 font-medium">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-border-subtle">
+                      <tr v-for="record in group.records" :key="record.configId" class="bg-elevated transition-colors hover:bg-surface">
+                        <td class="px-4 py-3 font-mono text-xs text-accent">{{ record.configId }}</td>
+                        <td class="px-4 py-3">
+                          <span class="inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-text-secondary">
+                            {{ record.configType || record.secret || '-' }}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3 font-mono text-xs text-text-tertiary">{{ record.refId || '-' }}</td>
+                        <td class="px-4 py-3">
+                          <span
+                            class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                            :class="record.status === 1 ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'"
+                          >
+                            {{ record.status === 1 ? '启用' : '禁用' }}
+                          </span>
+                        </td>
+                        <td class="px-4 py-3">
+                          <div class="flex flex-wrap gap-2">
+                            <button class="text-xs font-medium text-accent hover:text-accent-hover" type="button" @click="editRecord(record)">编辑</button>
+                            <button class="text-xs font-medium text-text-secondary hover:text-text-primary" type="button" @click="toggleStatus(record)">
+                              {{ record.status === 1 ? '禁用' : '启用' }}
+                            </button>
+                            <button class="text-xs font-medium text-red-600 hover:text-red-700" type="button" @click="deleteRecord(record)">删除</button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div v-if="records.length === 0" class="rounded-card-md border border-border-subtle bg-elevated px-4 py-10 text-center text-text-tertiary">暂无配置</div>
+              </div>
+
+              <div v-else class="mt-4 overflow-hidden rounded-card-md border border-border-subtle">
                 <table class="w-full min-w-[640px] text-left text-sm">
                   <thead class="bg-surface text-text-secondary">
                     <tr>
@@ -735,3 +818,24 @@ function toPayload(kind, data) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.config-card-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.38) transparent;
+}
+
+.config-card-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.config-card-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.38);
+  border-radius: 999px;
+}
+
+.config-card-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+</style>

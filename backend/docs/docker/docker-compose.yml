@@ -1,10 +1,12 @@
 services:
-  mysql:
-    image: mysql:8.0.32
-    container_name: idealagent-mysql
+  agent-mysql:
+    image: ${AGENT_MYSQL_IMAGE:-agent-mysql:8.0.32}
+    build:
+      context: ./images/mysql
+    container_name: agent-mysql
     restart: unless-stopped
     ports:
-      - "13306:3306"
+      - "${AGENT_MYSQL_PORT:-13306}:3306"
     environment:
       MYSQL_DATABASE: ${IDEAL_AGENT_MYSQL_DATABASE}
       MYSQL_USER: ${IDEAL_AGENT_USERNAME}
@@ -12,55 +14,141 @@ services:
       MYSQL_ROOT_PASSWORD: ${IDEAL_AGENT_ROOT_PASSWORD}
       TZ: ${TZ}
     volumes:
-      - idealagent_mysql_data:/var/lib/mysql
+      - agent-mysql-data:/var/lib/mysql
       - ./conf/my.cnf:/etc/mysql/conf.d/my.cnf:ro
       - ../mysql/ideal_agent_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ../mysql/ideal_agent_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
-      - idealagent
+      - agent-network
 
-  redis:
-    image: redis:8-alpine
-    container_name: idealagent-redis
+  agent-pgvector:
+    image: ${AGENT_PGVECTOR_IMAGE:-agent-pgvector:0.7.4-pg16}
+    build:
+      context: ./images/pgvector
+    container_name: agent-pgvector
     restart: unless-stopped
     ports:
-      - "6379:6379"
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf", "--requirepass", "${IDEAL_AGENT_PASSWORD}"]
-    volumes:
-      - idealagent_redis_data:/data
-      - ./conf/redis.conf:/usr/local/etc/redis/redis.conf:ro
-    networks:
-      - idealagent
-
-  pgvector:
-    image: pgvector/pgvector:0.7.4-pg16
-    container_name: idealagent-pgvector
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
+      - "${AGENT_PGVECTOR_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ideal_agent
       POSTGRES_USER: ${IDEAL_AGENT_USERNAME}
       POSTGRES_PASSWORD: ${IDEAL_AGENT_PASSWORD}
       TZ: ${TZ}
     volumes:
-      - idealagent_pgvector_data:/var/lib/postgresql/data
+      - agent-pgvector-data:/var/lib/postgresql/data
       - ./conf/pgvector.sql:/docker-entrypoint-initdb.d/01_pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d ideal_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
-      - idealagent
+      - agent-network
 
-  rabbitmq:
-    image: registry.cn-hangzhou.aliyuncs.com/xfg-studio/rabbitmq:3.12.9
-    container_name: idealagent-rabbitmq
+  agent-backend:
+    image: ${AGENT_BACKEND_IMAGE:-agent-backend:latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: agent-backend
     restart: unless-stopped
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${AGENT_BACKEND_PORT:-8066}:8066"
+    env_file:
+      - ./.env
     environment:
-      RABBITMQ_DEFAULT_USER: ${IDEAL_AGENT_USERNAME}
-      RABBITMQ_DEFAULT_PASS: ${IDEAL_AGENT_PASSWORD}
+      SPRING_PROFILES_ACTIVE: docker
+    depends_on:
+      agent-mysql:
+        condition: service_healthy
+      agent-pgvector:
+        condition: service_healthy
     networks:
-      - idealagent
+      - agent-network
+
+  agent-mcp-csdn:
+    image: ${AGENT_MCP_CSDN_IMAGE:-agent-mcp-csdn:latest}
+    build:
+      context: ../../../mcp
+      dockerfile: Dockerfile
+      args:
+        MCP_MODULE: mcp-server-csdn
+        MCP_JAR: mcp-server-csdn.jar
+        MCP_PORT: 9001
+    container_name: agent-mcp-csdn
+    restart: unless-stopped
+    expose:
+      - "9001"
+    networks:
+      - agent-network
+
+  agent-mcp-amap:
+    image: ${AGENT_MCP_AMAP_IMAGE:-agent-mcp-amap:latest}
+    build:
+      context: ../../../mcp
+      dockerfile: Dockerfile
+      args:
+        MCP_MODULE: mcp-server-amap
+        MCP_JAR: mcp-server-amap.jar
+        MCP_PORT: 9003
+    container_name: agent-mcp-amap
+    restart: unless-stopped
+    expose:
+      - "9003"
+    networks:
+      - agent-network
+
+  agent-mcp-email:
+    image: ${AGENT_MCP_EMAIL_IMAGE:-agent-mcp-email:latest}
+    build:
+      context: ../../../mcp
+      dockerfile: Dockerfile
+      args:
+        MCP_MODULE: mcp-server-email
+        MCP_JAR: mcp-server-email.jar
+        MCP_PORT: 9004
+    container_name: agent-mcp-email
+    restart: unless-stopped
+    expose:
+      - "9004"
+    networks:
+      - agent-network
+
+  agent-mcp-bocha:
+    image: ${AGENT_MCP_BOCHA_IMAGE:-agent-mcp-bocha:latest}
+    build:
+      context: ../../../mcp
+      dockerfile: Dockerfile
+      args:
+        MCP_MODULE: mcp-server-bocha
+        MCP_JAR: mcp-server-bocha.jar
+        MCP_PORT: 9005
+    container_name: agent-mcp-bocha
+    restart: unless-stopped
+    expose:
+      - "9005"
+    networks:
+      - agent-network
+
+  agent-frontend:
+    image: ${AGENT_FRONTEND_IMAGE:-agent-frontend:latest}
+    build:
+      context: ../../../frontend
+      dockerfile: Dockerfile
+    container_name: agent-frontend
+    restart: unless-stopped
+    ports:
+      - "${AGENT_FRONTEND_PORT:-80}:80"
+    depends_on:
+      agent-backend:
+        condition: service_started
+    networks:
+      - agent-network
 
 #  one-api:
 #    image: justsong/one-api:v0.6.11-preview.7
@@ -78,10 +166,12 @@ services:
 #      - idealagent
 
 volumes:
-  idealagent_mysql_data:
-  idealagent_redis_data:
-  idealagent_pgvector_data:
+  agent-mysql-data:
+    name: agent-mysql-data
+  agent-pgvector-data:
+    name: agent-pgvector-data
 
 networks:
-  idealagent:
+  agent-network:
+    name: agent-network
     driver: bridge

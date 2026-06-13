@@ -19,8 +19,12 @@ import org.springframework.util.StringUtils;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 abstract class StepNodeSupport {
+    private static final Pattern TOOL_FIELD_PATTERN = Pattern.compile("\\\"tool\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
+
     protected final IChatClientArmory armory;
     protected final IMcpToolService mcpToolService;
     protected final WorkChatGateway chatGateway;
@@ -59,6 +63,9 @@ abstract class StepNodeSupport {
         ChatClient client = armory.resolve(flow.getClientId());
         try (McpToolHandle tools = mcpToolService.augmentMcpTool(request.getUserId(), flow.getClientId())) {
             ToolCallbackProvider provider = filterTools(tools.toolCallbackProvider(), toolPlan);
+            if (provider == null) {
+                throw new WorkException("MCP 工具未匹配: " + toolNameHint(toolPlan));
+            }
             return chatGateway.complete(client, messageBuilder.build(request.getUserId(), request.getSessionId(), flow.getClientId(), prompt, null, "work"), provider);
         }
     }
@@ -69,9 +76,41 @@ abstract class StepNodeSupport {
         }
         List<ToolCallback> callbacks = Arrays.stream(provider.getToolCallbacks())
                 .filter(callback -> callback.getToolDefinition() != null)
-                .filter(callback -> toolPlan.contains(callback.getToolDefinition().name()))
+                .filter(callback -> matchesToolName(toolPlan, callback.getToolDefinition().name()))
                 .toList();
-        return callbacks.isEmpty() ? null : ToolCallbackProvider.from(callbacks);
+        if (!callbacks.isEmpty()) {
+            return ToolCallbackProvider.from(callbacks);
+        }
+        return hasExplicitToolRequest(toolPlan) ? null : provider;
+    }
+
+    private boolean matchesToolName(String toolPlan, String callbackName) {
+        if (!StringUtils.hasText(callbackName)) {
+            return false;
+        }
+        if (toolPlan.contains(callbackName)) {
+            return true;
+        }
+        int index = callbackName.lastIndexOf('_');
+        String shortName = index >= 0 ? callbackName.substring(index + 1) : callbackName;
+        return StringUtils.hasText(shortName) && toolPlan.contains(shortName);
+    }
+
+    private String toolNameHint(String toolPlan) {
+        String normalized = normalizeToolPlan(toolPlan);
+        Matcher matcher = TOOL_FIELD_PATTERN.matcher(normalized);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        return StringUtils.hasText(toolPlan) ? normalized : "unknown";
+    }
+
+    private boolean hasExplicitToolRequest(String toolPlan) {
+        return TOOL_FIELD_PATTERN.matcher(normalizeToolPlan(toolPlan)).find();
+    }
+
+    private String normalizeToolPlan(String toolPlan) {
+        return toolPlan == null ? "" : toolPlan.replace("\\\"", "\"");
     }
 
     protected void emit(WorkEventSink sink, String sectionType, String content, Integer step, String sessionId) {

@@ -1,4 +1,6 @@
 <script setup>
+import { uiInputEmits } from './uiInputEmits'
+
 /**
  * UiInput - 统一输入框组件
  * Supports textarea via type="textarea"
@@ -12,7 +14,7 @@ const props = defineProps({
   autocomplete: { type: String, default: '' },
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(uiInputEmits)
 
 const baseClasses = 'w-full rounded-card-md border border-border-default bg-surface px-4 py-3 text-sm text-text-primary placeholder:text-text-tertiary outline-none transition-all duration-150 ease-out focus:border-accent focus:bg-elevated focus:ring-2 focus:ring-accent-light'
 const textareaClasses = `${baseClasses} min-h-[96px] resize-y`

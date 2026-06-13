@@ -48,4 +48,20 @@ class AiDisplayControllerTest {
                 .andExpect(jsonPath("$.data[0].secret").doesNotExist())
                 .andExpect(jsonPath("$.data.length()").value(1));
     }
+
+    @Test
+    void publicModelListReturnsEnabledModelsWithoutSecrets() throws Exception {
+        when(tokenParser.parseToken("token-1")).thenReturn(new AuthUserVO(7L, "alice", "user"));
+        when(aiConfigService.list(ConfigKind.MODEL)).thenReturn(List.of(
+                new AiConfigRecordVO("model_deepseek", "DeepSeek", "model", "{\"temperature\":0.7}", "model-secret", "api_deepseek", 1, 0L, null, null, null, null),
+                new AiConfigRecordVO("model_disabled", "Disabled", "model", "{}", "model-secret", "api_disabled", 0, 0L, null, null, null, null)));
+
+        mockMvc.perform(get("/ai/models").header("Authorization", "Bearer token-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].configId").value("model_deepseek"))
+                .andExpect(jsonPath("$.data[0].name").value("DeepSeek"))
+                .andExpect(jsonPath("$.data[0].secret").doesNotExist())
+                .andExpect(jsonPath("$.data[0].content").doesNotExist())
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
 }

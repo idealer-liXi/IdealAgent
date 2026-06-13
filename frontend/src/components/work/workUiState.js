@@ -16,6 +16,10 @@ export function canSendWork({ agentId, content, loading }) {
   return Boolean(agentId && String(content || '').trim() && !loading)
 }
 
+export function canEditWorkInput() {
+  return true
+}
+
 export function userInputCard(content) {
   return {
     clientType: 'user',
